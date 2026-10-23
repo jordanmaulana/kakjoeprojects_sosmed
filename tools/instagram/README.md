@@ -1,7 +1,7 @@
 # Instagram posting
 
 Put an image and a caption in a folder, merge it to `main`, and it is published on
-Instagram at the time you set. It uses Instagram's own API directly, with no other
+Instagram at the time you set. All products post to **one shared Instagram account**. It uses Instagram's own API directly, with no other
 service in between. Plain Node 20+, no dependencies.
 
 How it works:
@@ -13,7 +13,7 @@ How it works:
 - After publishing, the Action commits a receipt (`.instagram.json`) into the folder, so the
   same post is never published twice.
 - A second Action ([`instagram-refresh-token.yml`](../../.github/workflows/instagram-refresh-token.yml))
-  renews the access tokens every Monday. Tokens expire after 60 days if they aren't renewed.
+  renews the access token every Monday. It expires after 60 days if it isn't renewed.
 
 ## One-time setup
 
@@ -44,15 +44,11 @@ In the repo: **Settings → Secrets and variables → Actions → New repository
 
 | Secret | Value |
 |---|---|
-| `IG_TOKEN_NGATURDUIT` | The token for the Ngatur Duit account (same for `IG_TOKEN_CARIINKERJA`, `IG_TOKEN_AIBURNOUT`). Only add the ones you use. |
-| `GH_SECRETS_TOKEN` | A [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new) for this repo only, with **Secrets: Read and write**. The weekly renewal uses it to save the new Instagram tokens. |
+| `IG_TOKEN` | The Instagram token from step 2. |
+| `GH_SECRETS_TOKEN` | A [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new) for this repo only, with **Secrets: Read and write**. The weekly renewal uses it to save the new Instagram token. |
 
-The account name in `post.json` decides which token is used: `"account": "ngaturduit"` →
-`IG_TOKEN_NGATURDUIT`. For a new account, add its secret and add one line for it in both
-workflow files.
-
-To check a token locally: `IG_TOKEN_NGATURDUIT=... npm run ig -- accounts` prints which
-Instagram account it belongs to.
+To check the token locally: `IG_TOKEN=... npm run ig -- whoami` prints which Instagram
+account it posts as.
 
 ## Making a post
 
@@ -70,7 +66,6 @@ ngaturduit.my.id/instagram/2026-10-28-naik-level/
 
 ```json
 {
-  "account": "ngaturduit",
   "at": "2026-10-28 19:00",
   "type": "post",
   "status": "schedule"
@@ -79,7 +74,6 @@ ngaturduit.my.id/instagram/2026-10-28-naik-level/
 
 | Field | Meaning |
 |---|---|
-| `account` | Which account to post to (see secrets above). |
 | `at` | When to publish. Read as **WIB** unless you add an offset (`2026-10-28T19:00:00+08:00`). |
 | `type` | `post` (feed, default) or `story` (one 9:16 image, no caption). |
 | `status` | `schedule` (default) to publish at `at`, or `draft` to keep it on hold. |
@@ -114,13 +108,14 @@ npm run ig -- check   <folder>              # check a post against Instagram's l
 npm run ig -- publish <folder> --dry-run    # show what would be published, publish nothing
 npm run ig -- publish <folder> --now        # publish right now (folder must be committed and pushed)
 npm run ig -- publish --due                 # what the Action runs
-npm run ig -- refresh                       # renew tokens and print them
+npm run ig -- refresh                       # renew the token and print it
 npm test
 ```
 
-To publish from your own machine, set the token (`export IG_TOKEN_NGATURDUIT=...`), and
+To publish from your own machine, set the token (`export IG_TOKEN=...`), and
 commit and push the folder first, because Instagram fetches the image from GitHub. Commit
 the `.instagram.json` it writes afterwards.
 
 Publishing is final: to change or remove a live post, do it in the Instagram app.
-Instagram caps how many posts an account can publish through the API in 24 hours (100 at the time of writing).
+Instagram caps how many posts an account can publish through the API in 24 hours (100 at
+the time of writing). That cap is shared by all products, since they use one account.

@@ -27,10 +27,7 @@ jobs:
 
       - name: Publish due posts
         env:
-          # One secret per account: IG_TOKEN_<ACCOUNT>. Add a line here for a new account.
-          IG_TOKEN_NGATURDUIT: ${{ secrets.IG_TOKEN_NGATURDUIT }}
-          IG_TOKEN_CARIINKERJA: ${{ secrets.IG_TOKEN_CARIINKERJA }}
-          IG_TOKEN_AIBURNOUT: ${{ secrets.IG_TOKEN_AIBURNOUT }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
         run: node tools/instagram/instagram.mjs publish --due
 
       # Runs even if one post failed, so receipts for the ones that went out are kept.

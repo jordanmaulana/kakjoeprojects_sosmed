@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Publish Instagram posts (image(s) + caption) straight through Instagram's own API.
 //
-//   node tools/instagram/instagram.mjs accounts
+//   node tools/instagram/instagram.mjs whoami
 //   node tools/instagram/instagram.mjs list
 //   node tools/instagram/instagram.mjs check   <post-folder>...
 //   node tools/instagram/instagram.mjs publish <post-folder>... [--now] [--dry-run]
 //   node tools/instagram/instagram.mjs publish --due [--dry-run]
 //   node tools/instagram/instagram.mjs refresh [--update-github-secrets]
 //
-// Each account needs a token in IG_TOKEN_<ACCOUNT> (e.g. IG_TOKEN_NGATURDUIT).
+// Every product posts to one shared Instagram account, whose token is in IG_TOKEN.
 // Instagram downloads the images itself, from GitHub's public raw links.
 // See tools/instagram/README.md.
 
@@ -29,15 +29,9 @@ const POLL_TRIES = 40; // about 2 minutes
 const API_BASE = (process.env.IG_API_BASE || 'https://graph.instagram.com').replace(/\/+$/, '');
 const API_VERSION = process.env.IG_API_VERSION || 'v23.0';
 
-function tokenEnvName(account) {
-  return `IG_TOKEN_${account.toUpperCase()}`;
-}
-
-function tokenFor(account) {
-  const name = tokenEnvName(account);
-  const token = process.env[name];
-  if (!token) throw new Error(`${name} is not set. Add the token for "${account}" (see tools/instagram/README.md).`);
-  return token;
+function token() {
+  if (!process.env.IG_TOKEN) throw new Error('IG_TOKEN is not set. See tools/instagram/README.md for how to get one.');
+  return process.env.IG_TOKEN;
 }
 
 async function graph(token, method, path, params = {}) {
@@ -123,7 +117,7 @@ function rel(p) {
 
 function printCheck(post, result) {
   console.log(`\n${rel(post.dir)}`);
-  console.log(`  account: ${post.account ?? '?'}   type: ${post.postType}   status: ${post.status}`);
+  console.log(`  type: ${post.postType}   status: ${post.status}`);
   console.log(`  at: ${post.at ?? '?'}${result.when ? `  (UTC ${result.when})` : ''}`);
   console.log(`  images: ${post.images.map((i) => i.name || basename(i.path)).join(', ') || 'none'}`);
   console.log(`  caption: ${[...post.caption].length} chars`);
@@ -149,18 +143,9 @@ function findPostFolders() {
 
 // ---------- commands ----------
 
-async function cmdAccounts() {
-  const names = Object.keys(process.env).filter((k) => /^IG_TOKEN_[A-Z0-9_]+$/.test(k) && process.env[k]);
-  if (!names.length) return console.log('No IG_TOKEN_<ACCOUNT> variables are set.');
-  for (const name of names) {
-    const account = name.slice('IG_TOKEN_'.length).toLowerCase();
-    try {
-      const me = await whoAmI(process.env[name]);
-      console.log(`  ${account.padEnd(14)} @${me.username}  (id ${me.id})`);
-    } catch (e) {
-      console.log(`  ${account.padEnd(14)} ✖ ${e.message}`);
-    }
-  }
+async function cmdWhoami() {
+  const me = await whoAmI(token());
+  console.log(`IG_TOKEN posts as @${me.username} (id ${me.id}).`);
 }
 
 function cmdCheck(dirs) {
@@ -183,7 +168,7 @@ function cmdList() {
     try {
       const post = loadPost(dir);
       const state = post.receipt ? `published ${post.receipt.publishedAt}` : post.status === 'draft' ? 'draft (on hold)' : 'waiting';
-      console.log(`${rel(dir).padEnd(55)} ${String(post.account).padEnd(14)} ${String(post.at).padEnd(18)} ${state}`);
+      console.log(`${rel(dir).padEnd(55)} ${String(post.at).padEnd(18)} ${state}`);
     } catch (e) {
       console.log(`${rel(dir).padEnd(55)} ✖ ${e.message}`);
     }
@@ -214,33 +199,33 @@ async function publishOne(dir, { now, force, dryRun, base, quietSkip }) {
 
   const urls = post.images.map((img) => imageUrl(base, img.path));
   if (dryRun) {
-    console.log(`  (dry run) would publish to "${post.account}" with:\n    ${urls.join('\n    ')}`);
+    console.log(`  (dry run) would publish with:\n    ${urls.join('\n    ')}`);
     return 'skipped';
   }
 
   for (const u of urls) await checkUrl(u);
-  const token = tokenFor(post.account);
-  const me = await whoAmI(token);
+  const tok = token();
+  const me = await whoAmI(tok);
   console.log(`  → @${me.username}`);
 
   let creationId;
   if (post.postType === 'story') {
-    creationId = await createContainer(token, me.id, { media_type: 'STORIES', image_url: urls[0] });
+    creationId = await createContainer(tok, me.id, { media_type: 'STORIES', image_url: urls[0] });
   } else if (urls.length === 1) {
-    creationId = await createContainer(token, me.id, { image_url: urls[0], caption: post.caption });
+    creationId = await createContainer(tok, me.id, { image_url: urls[0], caption: post.caption });
   } else {
     const children = [];
-    for (const u of urls) children.push(await createContainer(token, me.id, { image_url: u, is_carousel_item: 'true' }));
-    creationId = await createContainer(token, me.id, { media_type: 'CAROUSEL', children: children.join(','), caption: post.caption });
+    for (const u of urls) children.push(await createContainer(tok, me.id, { image_url: u, is_carousel_item: 'true' }));
+    creationId = await createContainer(tok, me.id, { media_type: 'CAROUSEL', children: children.join(','), caption: post.caption });
   }
 
-  const { id: mediaId } = await graph(token, 'POST', `${me.id}/media_publish`, { creation_id: creationId });
+  const { id: mediaId } = await graph(tok, 'POST', `${me.id}/media_publish`, { creation_id: creationId });
 
   // Write the receipt straight away so a later failure can never cause a second post.
-  const receipt = { mediaId, account: post.account, username: me.username, publishedAt: new Date().toISOString(), scheduledFor: result.when, images: urls };
+  const receipt = { mediaId, username: me.username, publishedAt: new Date().toISOString(), scheduledFor: result.when, images: urls };
   writeFileSync(join(post.dir, RECEIPT), JSON.stringify(receipt, null, 2) + '\n');
   try {
-    const { permalink } = await graph(token, 'GET', mediaId, { fields: 'permalink' });
+    const { permalink } = await graph(tok, 'GET', mediaId, { fields: 'permalink' });
     receipt.permalink = permalink;
     writeFileSync(join(post.dir, RECEIPT), JSON.stringify(receipt, null, 2) + '\n');
   } catch { /* the post is live; the link is only nice to have */ }
@@ -270,31 +255,21 @@ async function cmdPublish(dirs, flags) {
 
 // Long-lived tokens last 60 days. Refreshing gives a fresh 60 days.
 async function cmdRefresh(flags) {
-  const names = Object.keys(process.env).filter((k) => /^IG_TOKEN_[A-Z0-9_]+$/.test(k) && process.env[k]);
-  if (!names.length) return console.log('No IG_TOKEN_<ACCOUNT> variables are set. Nothing to renew.');
-  let failed = 0;
-  for (const name of names) {
-    try {
-      const url = new URL(`${API_BASE}/refresh_access_token`);
-      url.searchParams.set('grant_type', 'ig_refresh_token');
-      url.searchParams.set('access_token', process.env[name]);
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok || !data.access_token) throw new Error(data.error?.message || `HTTP ${res.status}`);
-      const days = Math.round((data.expires_in || 0) / 86400);
-      if (flags.updateGithubSecrets) {
-        // The new token goes to gh on stdin, never to the log.
-        execFileSync('gh', ['secret', 'set', name], { input: data.access_token, stdio: ['pipe', 'ignore', 'inherit'] });
-        console.log(`✔ ${name} refreshed (valid ${days} more days) and saved to GitHub secrets.`);
-      } else {
-        console.log(`✔ ${name} refreshed (valid ${days} more days). New token:\n${data.access_token}`);
-      }
-    } catch (e) {
-      failed++;
-      console.error(`✖ ${name}: ${e.message}`);
-    }
+  if (!process.env.IG_TOKEN) return console.log('IG_TOKEN is not set. Nothing to renew.');
+  const url = new URL(`${API_BASE}/refresh_access_token`);
+  url.searchParams.set('grant_type', 'ig_refresh_token');
+  url.searchParams.set('access_token', process.env.IG_TOKEN);
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || !data.access_token) throw new Error(`Could not renew IG_TOKEN: ${data.error?.message || `HTTP ${res.status}`}`);
+  const days = Math.round((data.expires_in || 0) / 86400);
+  if (flags.updateGithubSecrets) {
+    // The new token goes to gh on stdin, never to the log.
+    execFileSync('gh', ['secret', 'set', 'IG_TOKEN'], { input: data.access_token, stdio: ['pipe', 'ignore', 'inherit'] });
+    console.log(`✔ IG_TOKEN refreshed (valid ${days} more days) and saved to GitHub secrets.`);
+  } else {
+    console.log(`✔ IG_TOKEN refreshed (valid ${days} more days). New token:\n${data.access_token}`);
   }
-  if (failed) process.exitCode = 1;
 }
 
 // ---------- main ----------
@@ -310,22 +285,22 @@ const dirs = rest.filter((a) => !a.startsWith('--'));
 
 try {
   switch (cmd) {
-    case 'accounts': await cmdAccounts(); break;
+    case 'whoami': await cmdWhoami(); break;
     case 'list': cmdList(); break;
     case 'check': cmdCheck(dirs); break;
     case 'publish': await cmdPublish(dirs, flags); break;
     case 'refresh': await cmdRefresh(flags); break;
     default:
       console.log(`Usage:
-  node tools/instagram/instagram.mjs accounts               show which Instagram account each token belongs to
+  node tools/instagram/instagram.mjs whoami                 show which Instagram account IG_TOKEN posts as
   node tools/instagram/instagram.mjs list                   list post folders and their state
   node tools/instagram/instagram.mjs check <folder>...      check posts against Instagram's limits (offline)
   node tools/instagram/instagram.mjs publish <folder>...    publish posts whose time has come
       --now        publish now even if "at" is later (or long past)
       --dry-run    check everything, publish nothing
   node tools/instagram/instagram.mjs publish --due          publish every due post in the repo (used by the GitHub Action)
-  node tools/instagram/instagram.mjs refresh                renew the 60-day tokens
-      --update-github-secrets   save the new tokens with "gh secret set"`);
+  node tools/instagram/instagram.mjs refresh                renew the 60-day token
+      --update-github-secrets   save the new token with "gh secret set"`);
       if (cmd) process.exitCode = 1;
   }
 } catch (e) {

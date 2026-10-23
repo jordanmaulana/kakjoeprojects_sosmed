@@ -49,7 +49,7 @@ test('caption drops comments and counts hashtags', () => {
 
 test('a good feed post passes', () => {
   const dir = postDir({
-    'post.json': JSON.stringify({ account: 'x', at: FUTURE }),
+    'post.json': JSON.stringify({ at: FUTURE }),
     'caption.md': 'Halo #tes',
     '1.jpg': fakeJpeg(1080, 1350),
   });
@@ -61,7 +61,7 @@ test('a good feed post passes', () => {
 test('limits are enforced', () => {
   const tags = Array.from({ length: 31 }, (_, i) => `#t${i}`).join(' ');
   const files = {
-    'post.json': JSON.stringify({ account: 'x', at: '2020-01-01 10:00' }),
+    'post.json': JSON.stringify({ at: '2020-01-01 10:00' }),
     'caption.md': 'a'.repeat(2201) + ' ' + tags,
     'tall.jpg': fakeJpeg(1080, 1920), // 9:16 is too tall for the feed
   };
@@ -76,13 +76,13 @@ test('limits are enforced', () => {
 });
 
 test('PNG is refused because Instagram only takes JPEG', () => {
-  const dir = postDir({ 'post.json': JSON.stringify({ account: 'x', at: FUTURE }), 'a.png': readFileSync(OG) });
+  const dir = postDir({ 'post.json': JSON.stringify({ at: FUTURE }), 'a.png': readFileSync(OG) });
   assert.match(checkPost(loadPost(dir)).errors.join('\n'), /only takes JPEG/);
 });
 
 test('a story takes one image and ignores the caption', () => {
   const dir = postDir({
-    'post.json': JSON.stringify({ account: 'x', at: FUTURE, type: 'story' }),
+    'post.json': JSON.stringify({ at: FUTURE, type: 'story' }),
     'caption.md': 'ignored',
     'a.jpg': fakeJpeg(1080, 1920),
   });
@@ -139,7 +139,7 @@ function run(root, args, ig) {
   return new Promise((resolve) => {
     const p = spawn(process.execPath, [join(root, 'tools', 'instagram', 'instagram.mjs'), ...args], {
       cwd: root,
-      env: { PATH: process.env.PATH, IG_TOKEN_DEMO: 'tok-demo', IG_API_BASE: ig.base, IMAGE_BASE_URL: `${ig.base}/img`, IG_POLL_MS: '1' },
+      env: { PATH: process.env.PATH, IG_TOKEN: 'tok-demo', IG_API_BASE: ig.base, IMAGE_BASE_URL: `${ig.base}/img`, IG_POLL_MS: '1' },
     });
     let out = '';
     p.stdout.on('data', (d) => (out += d));
@@ -154,10 +154,10 @@ test('publish --due publishes only due posts, once', async (t) => {
   const ig = await fakeInstagram(t);
   const jpg = fakeJpeg(1080, 1350);
   const root = fakeRepo(t, {
-    due: { 'post.json': JSON.stringify({ account: 'demo', at: iso(-60e3) }), 'caption.md': 'Halo\n\nbaris dua', '1.jpg': jpg },
-    later: { 'post.json': JSON.stringify({ account: 'demo', at: iso(3600e3) }), '1.jpg': jpg },
-    draft: { 'post.json': JSON.stringify({ account: 'demo', at: iso(-60e3), status: 'draft' }), '1.jpg': jpg },
-    stale: { 'post.json': JSON.stringify({ account: 'demo', at: iso(-48 * 3600e3) }), '1.jpg': jpg },
+    due: { 'post.json': JSON.stringify({ at: iso(-60e3) }), 'caption.md': 'Halo\n\nbaris dua', '1.jpg': jpg },
+    later: { 'post.json': JSON.stringify({ at: iso(3600e3) }), '1.jpg': jpg },
+    draft: { 'post.json': JSON.stringify({ at: iso(-60e3), status: 'draft' }), '1.jpg': jpg },
+    stale: { 'post.json': JSON.stringify({ at: iso(-48 * 3600e3) }), '1.jpg': jpg },
   });
 
   const first = await run(root, ['publish', '--due'], ig);
@@ -192,7 +192,7 @@ test('a carousel creates one container per image, then the carousel', async (t) 
   const ig = await fakeInstagram(t);
   const root = fakeRepo(t, {
     c: {
-      'post.json': JSON.stringify({ account: 'demo', at: iso(-60e3) }),
+      'post.json': JSON.stringify({ at: iso(-60e3) }),
       'caption.md': 'Geser',
       '1.jpg': fakeJpeg(1080, 1080),
       '2.jpg': fakeJpeg(1080, 1080),
@@ -209,7 +209,7 @@ test('a carousel creates one container per image, then the carousel', async (t) 
 
 test('a post that is not due is left alone unless --now', async (t) => {
   const ig = await fakeInstagram(t);
-  const root = fakeRepo(t, { s: { 'post.json': JSON.stringify({ account: 'demo', at: iso(3600e3), type: 'story' }), '1.jpg': fakeJpeg(1080, 1920) } });
+  const root = fakeRepo(t, { s: { 'post.json': JSON.stringify({ at: iso(3600e3), type: 'story' }), '1.jpg': fakeJpeg(1080, 1920) } });
   const dir = join(root, 'demo', 'instagram', 's');
 
   const waiting = await run(root, ['publish', dir], ig);
@@ -228,6 +228,6 @@ test('refresh prints a new token', async (t) => {
   const root = fakeRepo(t, {});
   const r = await run(root, ['refresh'], ig);
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /IG_TOKEN_DEMO refreshed \(valid 60 more days\)/);
+  assert.match(r.out, /IG_TOKEN refreshed \(valid 60 more days\)/);
   assert.match(r.out, /new-token/);
 });

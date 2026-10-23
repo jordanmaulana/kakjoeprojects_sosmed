@@ -117,7 +117,6 @@ export function loadPost(dir) {
 
   return {
     dir: root,
-    account: meta.account,
     at: meta.at,
     postType: meta.type || 'post',
     status: meta.status || 'schedule',
@@ -136,8 +135,6 @@ export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionCha
   const warnings = [];
   let when = null;
 
-  if (!post.account) errors.push('"account" is missing in post.json (e.g. "ngaturduit").');
-  else if (!/^[a-z0-9_]+$/.test(post.account)) errors.push(`"account" must be lowercase letters, digits or _ (got "${post.account}").`);
   if (!['post', 'story'].includes(post.postType)) errors.push(`"type" must be "post" or "story", got "${post.postType}".`);
   if (!['schedule', 'draft'].includes(post.status)) errors.push(`"status" must be "schedule" or "draft", got "${post.status}".`);
 
