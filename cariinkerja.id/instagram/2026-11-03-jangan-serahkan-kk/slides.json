@@ -1,0 +1,21 @@
+{
+  "theme": "cariinkerja-light",
+  "brand": "",
+  "slides": [
+    { "title": "Baru wawancara,\nudah diminta **KK?**", "size": 96,
+      "body": ["Tahan dulu ya."] },
+    { "eyebrow": "Jadi gini", "title": "Satu lembar KK isinya data **sekeluarga.**", "size": 76,
+      "list": ["NIK tiap anggota keluarga, plus nomor KK-nya.", "Tanggal lahir, agama, pendidikan, pekerjaan.", "Nama ayah dan ibu kandung. Nama ibu kandung sering dipakai bank buat verifikasi."] },
+    { "eyebrow": "Data OJK", "title": "**23.469** laporan penipuan lowongan kerja.", "size": 84,
+      "body": ["Masuk ke Indonesia Anti-Scam Centre dari November 2024 sampai Januari 2026. Urutan keempat modus yang paling sering dilaporkan."] },
+    { "eyebrow": "Nah, datanya dipakai buat apa?", "title": "Dijual, atau dipakai **pinjam atas namamu.**", "size": 78,
+      "body": ["Dukcapil udah berkali-kali ngingetin: KTP dan KK yang tersebar bisa diperjualbelikan atau dipakai daftar pinjol.", "Banyak korban baru tahu pas tagihannya datang."] },
+    { "eyebrow": "Terus kapan perusahaan butuh KK?", "title": "Biasanya **setelah kamu diterima.**", "size": 80,
+      "body": ["Buat daftarin keluargamu ke BPJS Kesehatan, yang syaratnya keluarga inti satu KK. Atau buat ngurus status tanggungan di pajak.", "Di tahap wawancara, yang dinilai itu kamu: CV, portofolio, jawabanmu."] },
+    { "eyebrow": "Kalau tetap diminta", "title": "Lakuin ini dulu", "size": 76,
+      "list": ["Tanya baik-baik, buat apa dan disimpan di mana.", "Cek perusahaannya: website resmi, email kantor, bukan @gmail.com.", "Kalau memang harus, kasih tulisan di fotonya: “Hanya untuk rekrutmen PT X, tanggal”.", "Diminta bayar apa pun? Udah, berhenti di situ."] },
+    { "title": "Perusahaan yang serius **bisa nunggu** sampai kamu diterima.", "size": 84,
+      "body": ["Data keluargamu bukan syarat buat ngobrol di wawancara."],
+      "brand": "cariinkerja.id" }
+  ]
+}

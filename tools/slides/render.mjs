@@ -18,6 +18,10 @@ const THEMES = {
     bg: '#F4F6FA', ink: '#0F1729', muted: '#5A6478', accent: '#0F6FE0', card: '#FFFFFF',
     rule: '#E1E7F0', tint: '#E4F0FF', bgCss: '#F4F6FA',
   },
+  'cariinkerja-light': {
+    bg: '#FBF9FF', ink: '#1A1424', muted: '#5E5670', accent: '#863BFF', card: '#FFFFFF',
+    rule: '#E7E0F5', tint: '#EFE6FF', bgCss: 'radial-gradient(120% 80% at 85% 0%, #EFE4FF 0%, #FBF9FF 55%, #FFFFFF 100%)',
+  },
   cariinkerja: {
     bg: '#050308', ink: '#FFFFFF', muted: '#A9A3B5', accent: '#A777FF', card: '#1B1622',
     rule: '#2C2536', tint: '#241A35', bgCss: 'radial-gradient(120% 80% at 80% 0%, #2a1748 0%, #1a1424 45%, #050308 100%)',
