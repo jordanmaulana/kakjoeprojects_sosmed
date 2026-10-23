@@ -1,0 +1,24 @@
+{
+  "theme": "ngaturduit",
+  "brand": "",
+  "slides": [
+    { "title": "Gaji naik **Rp2 juta**.\nAkhir bulan tetap\nnggak ada sisa.", "size": 92,
+      "body": ["Kenapa bisa, dan apa yang perlu dilihat sebelum kenaikan berikutnya."] },
+    { "eyebrow": "Kenapa bisa", "title": "Pengeluaran ikut naik, pelan-pelan, tanpa terasa.",
+      "body": ["Namanya inflasi gaya hidup. Tiap penghasilan naik, ada saja yang ikut naik: tempat tinggal, langganan, jajan.", "Satu per satu masuk akal. Yang jarang dihitung: totalnya."] },
+    { "tag": "Ilustrasi, angkanya karangan", "eyebrow": "Setelah gaji naik", "title": "Ke mana Rp2 juta itu pergi",
+      "size": 72,
+      "rows": [["Pindah kos yang ada AC", "+Rp700rb"], ["Satu langganan streaming lagi", "+Rp150rb"], ["Kopi tiap hari kerja, 22 × Rp30rb", "+Rp660rb"], ["Makan di luar tiap weekend", "+Rp500rb"], ["Total kenaikan pengeluaran", "+Rp2.010rb", true]],
+      "body": ["Kenaikannya Rp2.000.000. Sisanya minus Rp10.000."] },
+    { "title": "Nggak ada satu pun yang boros.", "size": 88,
+      "body": ["Kos yang ada AC itu wajar. Kopi tiap pagi juga wajar.", "Masalahnya semuanya naik barengan, dan nggak ada yang mencatat sampai uangnya habis."] },
+    { "tag": "Ilustrasi, angkanya karangan", "eyebrow": "Yang perlu dihitung", "title": "Berapa bulan tabunganmu sanggup nutup pengeluaran.", "size": 64,
+      "rows": [["Tabungan", "Rp12 juta"], ["Dulu, keluar Rp6 juta sebulan", "2 bulan"], ["Sekarang, Rp8 juta sebulan", "1,5 bulan", true]],
+      "body": ["Gajinya naik. Napasnya malah lebih pendek."] },
+    { "eyebrow": "Sebelum kenaikan berikutnya", "title": "Putuskan dulu berapa yang langsung disisihkan.", "size": 76,
+      "body": ["Separuh, sepertiga, atau seperempat dari kenaikannya. Terserah kamu.", "Pindahkan di hari gajian, sebelum sempat terpakai. Sisanya boleh dinikmati tanpa rasa bersalah."] },
+    { "eyebrow": "Kalau mau tahu angkamu sendiri", "title": "Napasmu sekarang berapa bulan?", "size": 84,
+      "body": ["Ngatur Duit menghitungnya dari catatanmu sendiri. Catatnya cukup diketik seperti chat: “kopi 30k”.", "Aplikasi belum memperhitungkan utang, jadi kalau ada cicilan, angka aslinya lebih rendah."],
+      "brand": "Ngatur Duit · ngaturduit.my.id" }
+  ]
+}
