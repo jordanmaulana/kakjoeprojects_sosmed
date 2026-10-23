@@ -96,6 +96,8 @@ Also:
   substance and a closing slide, and people save carousels.
 - **Single image, 1080×1350** for one sharp opinion or one number.
 - Every slide in a carousel uses the same size (the posting checks warn otherwise).
+- **Reel** when Jordan asks for one, or when the idea needs a face, a voice or a screen
+  being used (a demo, a reaction, a story told out loud). See §4a.
 
 ### Slides
 
@@ -138,6 +140,84 @@ Level 0 posts carry no logo.
 
 ---
 
+## 4a. Reels
+
+Same rules as every other post: the one rule in §1, a selling level from §2, the
+sensitivity check in §3, the product's voice. What changes is what Claude hands over.
+Claude writes the reel; Jordan records, edits and posts it.
+
+### Where a reel lives
+
+```
+<product>/reels/<date-slug>/
+├── brief.md      # same brief as any post (§8), with "Format: reel"
+├── reel.md       # script, shot list, on-screen text, audio, cover
+└── caption.md    # the caption, exactly as it should appear
+```
+
+Reels go in `reels/`, not `instagram/`. The posting checks and the weekly queue only handle
+image posts, and they would reject a folder with no images. Once the reel is edited, Jordan
+uploads it in the Instagram app (it can be scheduled there the same way). If a finished
+`.mp4` should be kept, put it in the same folder.
+
+### Types
+
+| Type | What it is | Good for |
+|---|---|---|
+| **Talking head** | Jordan on camera, jump cuts, burned-in subtitles. | Opinions (workflow 2), cariinkerja.id, anything in Jordan's own voice. |
+| **Screen demo** | A screen recording of the product with a voice-over. | Level 2 and 3: showing the step the product does. |
+| **Text on b-roll** | Big on-screen text over simple footage (hands typing, a receipt, a street), no face. | Ngatur Duit, which never speaks as its maker, and quick tips. |
+| **Produced** | Animated scenes from a template. cariinkerja.id already has one (`ads/remotion/` in its repo, 9:16, 30 fps, Geist). | Launches and evergreen explainers. |
+
+### Shape
+
+- **1080×1920 (9:16), 15 to 45 seconds.** One idea per reel.
+- **0 to 2 s, the hook:** said out loud and written on screen at the same time. Same hook
+  styles as §4. No logo, no intro, no "halo semuanya".
+- **Middle:** one beat every 3 to 5 seconds (a new line, a cut, a number on screen).
+- **Last 3 to 5 s, the close:** the takeaway, and at Level 1 to 3 the product line. At
+  Level 0, end on the takeaway.
+- **Subtitles always.** Many people watch muted. Keep every word inside the middle of the
+  frame: Instagram's buttons cover roughly the bottom fifth and the right edge.
+- **Pace:** Jordan talks at about 5 to 6 syllables a second, so a 30-second reel holds about
+  130 syllables (from cariinkerja.id's voice analysis). Write to that, then cut 10%.
+- **Cover:** a frame with the hook written large in the middle, because the profile grid
+  crops a reel's cover to the centre.
+
+### Audio
+
+- **Jordan's own voice first.** It is the brand on cariinkerja.id and the most honest sound.
+- Background music only quiet and under the voice. Business accounts only get Instagram's
+  licensed library, so the script names a mood ("pelan, piano, tidak mengganggu suara") and
+  Jordan picks the track in the app.
+- **No cloned voice.** cariinkerja.id's guide track (`remotion/public/vo.wav`) must never
+  ship, and the same goes for any AI voice in Jordan's name.
+
+### `reel.md`
+
+```markdown
+# <title>
+
+- Type: talking head | screen demo | text on b-roll | produced
+- Length: ~30 s
+- Audio: <voice / music mood>
+- Cover text: <hook, big>
+
+| Time | Said (voice) | On screen (text) | Shot |
+|---|---|---|---|
+| 0–2 s | "Udah apply 200 loker, yang bales? Nol." | Udah apply 200 loker. Yang bales? Nol. | Jordan, close-up, straight to camera |
+| 2–8 s | … | … | … |
+| last 4 s | … | <takeaway> / <product line if Level 1–3> | … |
+
+## Notes for recording
+- <anything Jordan needs: props, which screen to record, what to blur>
+```
+
+Blur or skip anything private in a screen recording: real names, balances, email addresses.
+Demo screens use made-up data, labelled "Ilustrasi" on screen like slides.
+
+---
+
 ## 5. Words to avoid
 
 These are banned in at least one product's doc and read as machine-written on any of them:
@@ -172,7 +252,7 @@ December". Claude researches it, takes a point of view and decides the soft sell
    bisa bikin napasmu lebih pendek." Not good: "Inflasi gaya hidup itu penting dipahami."
 5. **Find the soft-sell angle.** Which step in the post the product does for the reader.
    If there isn't one, drop to Level 1 or 0. Don't bend the post to make room.
-6. **Draft** the slides and caption (§4), in the product's voice.
+6. **Draft** the slides and caption (§4), or the reel (§4a), in the product's voice.
 7. **Run the checks** (§8) and open a PR with the post folder, `status: draft`.
 
 ## 7. Workflow 2: Jordan gives an opinion
@@ -209,6 +289,7 @@ Each post folder holds the usual `caption.md`, `post.json` and images (see
 # <post title>
 
 - Workflow: 1 (topic) | 2 (opinion)
+- Format: carousel | single image | reel
 - Jordan's ask: <topic or opinion, verbatim>
 - Product: <product> | none
 - Selling level: 0 | 1 | 2 | 3, and why
@@ -228,8 +309,10 @@ Then check:
 - [ ] Level recorded, and §3 checked.
 - [ ] Every fact has a source; every made-up number says "Ilustrasi".
 - [ ] Product voice doc followed; nothing from §5.
-- [ ] `npm run ig -- check <folder>` passes.
-- [ ] `post.json` says `"status": "draft"`. Jordan switches it to `ready` once he likes it.
+- [ ] Image posts: `npm run ig -- check <folder>` passes, and `post.json` says
+  `"status": "draft"`. Jordan switches it to `ready` once he likes it.
+- [ ] Reels: `reel.md` has every beat timed, subtitles match the voice line, and the
+  product never appears before the close.
 
 ---
 
