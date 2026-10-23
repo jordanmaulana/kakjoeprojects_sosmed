@@ -1,15 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { imageSize, parseWhen, readCaption, countHashtags, loadPost, checkPost } from './lib.mjs';
+import { buildQueue } from './instagram.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OG = join(HERE, '..', '..', 'ngaturduit.my.id', 'product_knowledge', 'og.png');
+const CLI = join(HERE, 'instagram.mjs');
 
 // Smallest header a JPEG size reader needs: SOI, then a SOF0 segment.
 function fakeJpeg(width, height) {
@@ -26,7 +27,24 @@ function postDir(files) {
   return dir;
 }
 
-const FUTURE = '2099-01-01 19:00';
+// A throwaway repo with <product>/instagram/<name>/ folders.
+function fakeRepo(t, posts) {
+  const root = mkdtempSync(join(tmpdir(), 'igrepo-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const dirs = {};
+  for (const [name, files] of Object.entries(posts)) {
+    const dir = join(root, 'demo.id', 'instagram', name);
+    mkdirSync(dir, { recursive: true });
+    for (const [f, content] of Object.entries(files)) writeFileSync(join(dir, f), content);
+    dirs[name] = dir;
+  }
+  return { root, dirs };
+}
+
+const NOW = new Date('2026-10-23T03:00:00Z'); // Fri 23 Oct 2026, 10:00 WIB
+const jpg = fakeJpeg(1080, 1350);
+
+// ---------- checks ----------
 
 test('reads PNG and JPEG sizes', () => {
   assert.deepEqual(imageSize(readFileSync(OG)), { width: 1200, height: 630, format: 'png' });
@@ -45,111 +63,77 @@ test('caption drops comments and counts hashtags', () => {
   assert.equal(countHashtags('#satu dua #tiga x#bukan'), 2);
 });
 
-test('a good feed post passes', () => {
-  const dir = postDir({
-    'post.json': JSON.stringify({ account: 'x', at: FUTURE }),
-    'caption.md': 'Halo #tes',
-    '1.jpg': fakeJpeg(1080, 1350),
-  });
-  const r = checkPost(loadPost(dir));
+test('a good post passes, PNG included', () => {
+  const dir = postDir({ 'post.json': JSON.stringify({ at: '2026-10-28 19:00' }), 'caption.md': 'Halo #tes', '1.jpg': jpg, '2.png': readFileSync(OG) });
+  const r = checkPost(loadPost(dir), { now: NOW });
   assert.deepEqual(r.errors, []);
-  assert.equal(r.when, '2099-01-01T12:00:00.000Z');
+  assert.equal(r.when, '2026-10-28T12:00:00.000Z');
+  assert.match(r.warnings.join('\n'), /different ratios/);
 });
 
 test('limits are enforced', () => {
   const tags = Array.from({ length: 31 }, (_, i) => `#t${i}`).join(' ');
   const files = {
-    'post.json': JSON.stringify({ account: 'x', at: '2020-01-01 10:00' }),
+    'post.json': JSON.stringify({ at: '2026-10-28 19:00', status: 'later' }),
     'caption.md': 'a'.repeat(2201) + ' ' + tags,
     'tall.jpg': fakeJpeg(1080, 1920), // 9:16 is too tall for the feed
+    'x.webp': 'not allowed',
   };
   for (let i = 0; i < 10; i++) files[`c${i}.jpg`] = fakeJpeg(1080, 1080);
-  const r = checkPost(loadPost(postDir(files)));
+  const r = checkPost(loadPost(postDir(files)), { now: NOW });
   const all = r.errors.join('\n');
-  assert.match(all, /in the past/);
+  assert.match(all, /"status" must be one of/);
   assert.match(all, /characters/);
   assert.match(all, /31 hashtags/);
   assert.match(all, /at most 10/);
   assert.match(all, /tall\.jpg is 1080×1920/);
 });
 
-test('a story takes one image and ignores the caption', () => {
-  const dir = postDir({
-    'post.json': JSON.stringify({ account: 'x', at: FUTURE, type: 'story' }),
-    'caption.md': 'ignored',
-    'a.jpg': fakeJpeg(1080, 1920),
-  });
-  const r = checkPost(loadPost(dir));
-  assert.deepEqual(r.errors, []);
-  assert.match(r.warnings.join('\n'), /Stories do not show a caption/);
+test('timing problems are warnings, not errors', () => {
+  const past = checkPost(loadPost(postDir({ 'post.json': JSON.stringify({ at: '2026-10-01 10:00' }), 'caption.md': 'x', '1.jpg': jpg })), { now: NOW });
+  assert.deepEqual(past.errors, []);
+  assert.match(past.warnings.join('\n'), /has passed/);
+  const far = checkPost(loadPost(postDir({ 'post.json': JSON.stringify({ at: '2027-06-01 10:00' }), 'caption.md': 'x', '1.jpg': jpg })), { now: NOW });
+  assert.match(far.warnings.join('\n'), /more than 75 days/);
 });
 
-// Runs the real CLI against a fake Postiz server and checks what it sends.
-test('schedule uploads, creates the post, and writes a receipt', async (t) => {
-  const calls = [];
-  const server = createServer((req, res) => {
-    let body = [];
-    req.on('data', (c) => body.push(c));
-    req.on('end', () => {
-      body = Buffer.concat(body);
-      calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, body });
-      res.setHeader('Content-Type', 'application/json');
-      if (req.url.startsWith('/public/v1/integration-settings/')) {
-        return res.end(JSON.stringify({ output: { maxLength: 2200, rules: 'test rule', settings: { properties: { post_type: { enum: ['post', 'story'] } } } } }));
-      }
-      if (req.url === '/public/v1/upload') return res.end(JSON.stringify({ id: 'm1', path: 'https://uploads.postiz.test/a.jpg' }));
-      if (req.url === '/public/v1/posts') return res.end(JSON.stringify([{ postId: 'p1', integration: 'ig-1' }]));
-      res.statusCode = 404; res.end('{}');
-    });
+// ---------- queue page ----------
+
+test('the queue lists ready posts by week, soonest first', (t) => {
+  const { dirs } = fakeRepo(t, {
+    b: { 'post.json': JSON.stringify({ at: '2026-11-03 09:00' }), 'caption.md': 'Kedua', '1.jpg': jpg },
+    a: { 'post.json': JSON.stringify({ at: '2026-10-28 19:00' }), 'caption.md': 'Pertama ```kode```', '1.jpg': jpg, '2.jpg': jpg },
+    old: { 'post.json': JSON.stringify({ at: '2026-10-20 19:00' }), 'caption.md': 'Lewat', '1.jpg': jpg },
+    draft: { 'post.json': JSON.stringify({ at: '2026-10-29 19:00', status: 'draft' }), '1.jpg': jpg },
+    done: { 'post.json': JSON.stringify({ at: '2026-10-30 19:00', status: 'scheduled' }), '1.jpg': jpg },
+    bad: { 'post.json': JSON.stringify({ at: '2026-10-31 19:00' }), '1.jpg': fakeJpeg(1080, 1920) },
   });
-  await new Promise((r) => server.listen(0, r));
-  t.after(() => server.close());
+  const md = buildQueue(Object.values(dirs), { now: NOW, repo: 'me/repo' });
 
-  // The CLI reads accounts.json next to itself, so run a copy in a temp folder.
-  const root = mkdtempSync(join(tmpdir(), 'igrepo-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(join(root, 'tools', 'instagram'), { recursive: true });
-  for (const f of ['instagram.mjs', 'lib.mjs']) copyFileSync(join(HERE, f), join(root, 'tools', 'instagram', f));
-  writeFileSync(join(root, 'tools', 'instagram', 'accounts.json'), JSON.stringify({ demo: 'ig-1' }));
-  const post = join(root, 'demo', 'instagram', 'p');
-  mkdirSync(post, { recursive: true });
-  writeFileSync(join(post, 'post.json'), JSON.stringify({ account: 'demo', at: FUTURE }));
-  writeFileSync(join(post, 'caption.md'), 'Halo\n\nbaris dua');
-  writeFileSync(join(post, '1.jpg'), fakeJpeg(1080, 1350));
+  // Order: missed first, then by week.
+  const order = ['## Missed', 'Lewat', '## Week of Mon 26 Oct 2026', 'Wed 28 Oct 2026, 19:00 WIB', 'Pertama', '## Week of Mon 2 Nov 2026', 'Tue 3 Nov 2026, 09:00 WIB', 'Kedua', '## Needs fixing'];
+  let at = -1;
+  for (const s of order) {
+    const i = md.indexOf(s);
+    assert.ok(i > at, `"${s}" out of order`);
+    at = i;
+  }
+  assert.doesNotMatch(md, /draft|demo\.id\/instagram\/done/);
+  assert.match(md, /demo\.id\/instagram\/bad`: 1\.jpg is 1080×1920/);
+  assert.match(md, /· demo\.id\n/);
+  // Images in order with download links, and a caption block that survives backticks.
+  assert.match(md, /1\. \[Download 1\.jpg\]\(https:\/\/raw\.githubusercontent\.com\/me\/repo\/main\/.*\/a\/1\.jpg\)/);
+  assert.match(md, /2\. \[Download 2\.jpg\]/);
+  assert.match(md, /````text\nPertama ```kode```\n````/);
+});
 
-  const run = () => new Promise((resolve) => {
-    const p = spawn(process.execPath, [join(root, 'tools', 'instagram', 'instagram.mjs'), 'schedule', post], {
-      env: { ...process.env, POSTIZ_API_KEY: 'k123', POSTIZ_API_URL: `http://127.0.0.1:${server.address().port}` },
-    });
-    let out = '';
-    p.stdout.on('data', (d) => (out += d));
-    p.stderr.on('data', (d) => (out += d));
-    p.on('close', (code) => resolve({ code, out }));
-  });
+test('an empty queue says so', () => {
+  assert.match(buildQueue([], { now: NOW, repo: null }), /Nothing to schedule right now/);
+});
 
-  const first = await run();
-  assert.equal(first.code, 0, first.out);
-  assert.deepEqual(calls.map((c) => c.url), ['/public/v1/integration-settings/ig-1', '/public/v1/upload', '/public/v1/posts']);
-  assert.ok(calls.every((c) => c.auth === 'k123'));
-
-  const upload = calls[1].body.toString('latin1');
-  assert.match(upload, /name="file"; filename="1\.jpg"/);
-  assert.match(upload, /Content-Type: image\/jpeg/);
-
-  const sent = JSON.parse(calls[2].body.toString());
-  assert.equal(sent.type, 'schedule');
-  assert.equal(sent.date, '2099-01-01T12:00:00.000Z');
-  assert.deepEqual(sent.posts[0].integration, { id: 'ig-1' });
-  assert.deepEqual(sent.posts[0].settings, { post_type: 'post' });
-  assert.equal(sent.posts[0].value[0].content, 'Halo\n\nbaris dua');
-  assert.deepEqual(sent.posts[0].value[0].image, [{ id: 'm1', path: 'https://uploads.postiz.test/a.jpg' }]);
-
-  const receipt = JSON.parse(readFileSync(join(post, '.postiz.json'), 'utf8'));
-  assert.deepEqual(receipt.postIds, ['p1']);
-
-  // A second run must not send it again.
-  const second = await run();
-  assert.equal(second.code, 0, second.out);
-  assert.match(second.out, /already sent/);
-  assert.equal(calls.length, 3);
+test('done marks a post scheduled and keeps its other fields', (t) => {
+  const { dirs } = fakeRepo(t, { p: { 'post.json': JSON.stringify({ at: '2026-10-28 19:00' }), '1.jpg': jpg } });
+  const r = spawnSync(process.execPath, [CLI, 'done', dirs.p], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(dirs.p, 'post.json'), 'utf8')), { at: '2026-10-28 19:00', status: 'scheduled' });
 });

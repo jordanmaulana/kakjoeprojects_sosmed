@@ -13,14 +13,15 @@ export const LIMITS = {
   // Feed images must sit between 4:5 portrait and 1.91:1 landscape.
   feedRatioMin: 4 / 5,
   feedRatioMax: 1.91,
-  storyRatio: 9 / 16,
+  // The Instagram app schedules posts up to 75 days ahead.
+  scheduleDaysMax: 75,
 };
 
-export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
-export const RECEIPT = '.postiz.json';
+export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
+export const STATUSES = ['ready', 'draft', 'scheduled'];
 const DEFAULT_OFFSET = '+07:00'; // WIB
 
-// Read width and height from a PNG, JPEG or WebP header.
+// Read width and height from a PNG, JPEG or WebP header (WebP so it can be named and refused).
 export function imageSize(buf) {
   // PNG: signature, then IHDR with width and height as big-endian uint32.
   if (buf.length > 24 && buf.readUInt32BE(0) === 0x89504e47) {
@@ -112,77 +113,66 @@ export function loadPost(dir) {
     return { path, name: basename(path), bytes: statSync(path).size, size: imageSize(buf) };
   });
 
-  const receiptPath = join(root, RECEIPT);
-  const receipt = existsSync(receiptPath) ? JSON.parse(readFileSync(receiptPath, 'utf8')) : null;
-
   return {
     dir: root,
-    account: meta.account,
     at: meta.at,
-    postType: meta.type || 'post',
-    status: meta.status || 'schedule',
+    status: meta.status || 'ready',
     caption,
     images,
-    receipt,
   };
 }
 
 // Check a loaded post against Instagram's limits.
-// Returns { errors, warnings, when }. errors block scheduling; warnings do not.
+// Returns { errors, warnings, when }. Errors mean the post can't be scheduled as it is.
 export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionChars } = {}) {
   const errors = [];
   const warnings = [];
   let when = null;
 
-  if (!post.account) errors.push('"account" is missing in post.json (a name from tools/instagram/accounts.json).');
-  if (!['post', 'story'].includes(post.postType)) errors.push(`"type" must be "post" or "story", got "${post.postType}".`);
-  if (!['schedule', 'draft'].includes(post.status)) errors.push(`"status" must be "schedule" or "draft", got "${post.status}".`);
+  if (!STATUSES.includes(post.status)) errors.push(`"status" must be one of ${STATUSES.join(', ')}; got "${post.status}".`);
 
   try {
     when = parseWhen(post.at);
-    if (new Date(when) <= new Date(now.getTime() + 5 * 60 * 1000)) {
-      errors.push(`"at" (${post.at}) is in the past or less than 5 minutes away.`);
+    const days = (new Date(when) - now) / 86400e3;
+    if (days < 0 && post.status === 'ready') {
+      // A warning, not an error: an old unscheduled post shouldn't fail every PR.
+      warnings.push(`"at" (${post.at}) has passed and the post is not marked scheduled. Pick a new time or set "status": "scheduled".`);
+    }
+    if (days > LIMITS.scheduleDaysMax && post.status === 'ready') {
+      warnings.push(`"at" is more than ${LIMITS.scheduleDaysMax} days away. The Instagram app can't schedule that far ahead yet.`);
     }
   } catch (e) {
     errors.push(e.message);
   }
 
   // Caption
-  if (post.postType === 'post') {
-    if (!post.caption) warnings.push('caption.md is empty. The post will go out with no caption.');
-    if ([...post.caption].length > maxChars) errors.push(`Caption is ${[...post.caption].length} characters. The limit is ${maxChars}.`);
-    const tags = countHashtags(post.caption);
-    if (tags > LIMITS.hashtags) errors.push(`Caption has ${tags} hashtags. Instagram allows ${LIMITS.hashtags}.`);
-    const mentions = countMentions(post.caption);
-    if (mentions > LIMITS.mentions) errors.push(`Caption has ${mentions} @mentions. Instagram allows ${LIMITS.mentions}.`);
-  } else if (post.caption) {
-    warnings.push('Stories do not show a caption. caption.md will be ignored.');
-  }
+  if (!post.caption) warnings.push('caption.md is empty. The post will go out with no caption.');
+  if ([...post.caption].length > maxChars) errors.push(`Caption is ${[...post.caption].length} characters. The limit is ${maxChars}.`);
+  const tags = countHashtags(post.caption);
+  if (tags > LIMITS.hashtags) errors.push(`Caption has ${tags} hashtags. Instagram allows ${LIMITS.hashtags}.`);
+  const mentions = countMentions(post.caption);
+  if (mentions > LIMITS.mentions) errors.push(`Caption has ${mentions} @mentions. Instagram allows ${LIMITS.mentions}.`);
 
   // Images
   const n = post.images.length;
-  if (n === 0) errors.push('No image found. Put a .jpg/.png/.webp in the folder or list it under "images".');
-  if (post.postType === 'post' && n > LIMITS.carouselMax) errors.push(`${n} images. A carousel holds at most ${LIMITS.carouselMax}.`);
-  if (post.postType === 'story' && n > 1) errors.push(`A story takes one image, found ${n}.`);
+  if (n === 0) errors.push('No image found. Put a .jpg or .png in the folder or list it under "images".');
+  if (n > LIMITS.carouselMax) errors.push(`${n} images. A carousel holds at most ${LIMITS.carouselMax}.`);
 
   for (const img of post.images) {
     if (img.missing) { errors.push(`Image not found: ${img.path}`); continue; }
-    if (!IMAGE_EXTS.includes(extname(img.path).toLowerCase())) { errors.push(`${img.name}: not an image Instagram takes (use .jpg or .png).`); continue; }
+    if (!IMAGE_EXTS.includes(extname(img.path).toLowerCase())) { errors.push(`${img.name}: use a .jpg or .png.`); continue; }
     if (img.bytes > LIMITS.imageBytes) errors.push(`${img.name} is ${(img.bytes / 1048576).toFixed(1)} MB. The limit is 8 MB.`);
     if (!img.size) { errors.push(`${img.name}: could not read the image size. Is the file a real image?`); continue; }
     const { width, height, format } = img.size;
     const ratio = width / height;
-    if (post.postType === 'post' && (ratio < LIMITS.feedRatioMin - 0.005 || ratio > LIMITS.feedRatioMax + 0.005)) {
-      errors.push(`${img.name} is ${width}×${height} (ratio ${ratio.toFixed(2)}). Feed images must be between 4:5 (0.80) and 1.91:1.`);
+    if (ratio < LIMITS.feedRatioMin - 0.005 || ratio > LIMITS.feedRatioMax + 0.005) {
+      errors.push(`${img.name} is ${width}×${height} (ratio ${ratio.toFixed(2)}). Feed images must be between 4:5 (0.80) and 1.91:1, or Instagram crops them.`);
     }
-    if (post.postType === 'story' && Math.abs(ratio - LIMITS.storyRatio) > 0.02) {
-      warnings.push(`${img.name} is ${width}×${height}. Stories look best at 9:16 (e.g. 1080×1920).`);
-    }
-    if (width < 320) warnings.push(`${img.name} is only ${width}px wide. Instagram will upscale it; 1080px is ideal.`);
-    if (format !== 'jpeg') warnings.push(`${img.name} is ${format.toUpperCase()}. Instagram's API is built around JPEG; if publishing fails, export it as .jpg.`);
+    if (width < 1080) warnings.push(`${img.name} is ${width}px wide. Instagram shows posts at 1080px, so it will look soft.`);
+    if (!['jpeg', 'png'].includes(format)) errors.push(`${img.name} is really a ${format.toUpperCase()} file. Save it as .jpg or .png.`);
   }
 
-  if (n > 1 && post.postType === 'post') {
+  if (n > 1) {
     const ratios = post.images.filter((i) => i.size).map((i) => (i.size.width / i.size.height).toFixed(2));
     if (new Set(ratios).size > 1) warnings.push('Carousel images have different ratios. Instagram crops them all to the first one.');
   }
