@@ -1,0 +1,15 @@
+{
+  "theme": "cariinkerja",
+  "brand": "",
+  "slides": [
+    { "title": "Iya, ekonomi lagi sulit.\n**Tapi usahamu jangan ikut sempit.**", "size": 88 },
+    { "eyebrow": "Jadi gini", "title": "Kebanyakan dari kita cari kerja dengan satu cara.", "size": 76,
+      "body": ["Apply loker, terus nunggu HR bales.", "Artinya yang tahu kamu ada cuma HR yang kebetulan buka CV-mu. Itu pintu yang sempit banget."] },
+    { "eyebrow": "Nah", "title": "Yang bisa ngajak kamu kerja bukan cuma HR.", "size": 80,
+      "body": ["Ada mantan rekan kerja, temen kuliah, orang yang pernah baca tulisanmu, klien lama.", "Mereka cuma perlu tahu dua hal: kamu bisa apa, dan kamu lagi cari."] },
+    { "eyebrow": "Mulai minggu ini", "title": "Yang kecil-kecil dulu", "size": 76,
+      "list": ["Isi About di LinkedIn-mu dengan jujur. Jangan cuma title doang.", "Posting satu hal yang kamu kerjain atau pelajari minggu ini.", "Kabarin lima orang yang kamu kenal kalau kamu lagi open to work."] },
+    { "title": "Ini nggak ngejamin dapet kerja.", "size": 84,
+      "body": ["Tapi makin banyak orang yang tahu kamu ada, makin banyak pintu yang bisa kebuka.", "Pelan-pelan aja ya. Semangat."] }
+  ]
+}
