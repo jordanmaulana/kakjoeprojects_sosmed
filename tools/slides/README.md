@@ -26,7 +26,7 @@ node tools/slides/render.mjs <post-folder>              # writes 1.png, 2.png, .
 
 | Field | Meaning |
 |---|---|
-| `theme` | `ngaturduit` (light, blue) or `cariinkerja` (dark, purple). |
+| `theme` | `ngaturduit` (light, blue), `cariinkerja` (dark, purple) or `cariinkerja-light` (light, purple). |
 | `title` | Big text. `**word**` puts it in the accent colour, `\n` breaks the line. `size` overrides the font size (px). |
 | `eyebrow` | Small uppercase label above the title. |
 | `tag` | Pill above everything. Use it for "Ilustrasi" when numbers are made up. |
