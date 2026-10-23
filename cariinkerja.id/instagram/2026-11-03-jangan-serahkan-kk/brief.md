@@ -27,3 +27,8 @@ All web pages below were found by search. The cloud environment couldn't open ne
 - The watermark tip (slide 6) is common advice, not from an official source.
 - Level 1 CTA line ("Cari loker yang cocok tanpa capek scroll") is mine. Swap or drop it if it feels too close to a pitch.
 - Date 2026-11-03 19:00 WIB is a placeholder slot after the two existing drafts.
+
+## Design
+
+- Jordan (2026-10-23): the first version was boring and the dark theme didn't work. He asked for stock photos.
+- The photo version is in Canva: https://canva.link/jptl5b0x85zyyky (light theme, stock photos, 7 slides at 1080×1440, plus one blank page at the end to delete). Stock photo sites and Canva downloads are blocked from Claude's environment, so the PNGs in this folder are the light text-only fallback. Once Jordan likes the Canva version, export pages 1 to 7 as PNG and replace 1.png to 7.png here.
