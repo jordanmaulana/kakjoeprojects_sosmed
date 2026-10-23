@@ -1,0 +1,10 @@
+{
+  "name": "kakjoeprojects-sosmed",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "ig": "node tools/instagram/instagram.mjs",
+    "test": "node --test tools/**/*.test.mjs"
+  }
+}
