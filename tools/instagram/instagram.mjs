@@ -1,72 +1,124 @@
 #!/usr/bin/env node
-// Schedule an Instagram post (image(s) + caption) through Postiz.
+// Publish Instagram posts (image(s) + caption) straight through Instagram's own API.
 //
 //   node tools/instagram/instagram.mjs accounts
-//   node tools/instagram/instagram.mjs check    <post-folder>...
-//   node tools/instagram/instagram.mjs schedule <post-folder>... [--draft] [--dry-run] [--force]
 //   node tools/instagram/instagram.mjs list
+//   node tools/instagram/instagram.mjs check   <post-folder>...
+//   node tools/instagram/instagram.mjs publish <post-folder>... [--now] [--dry-run]
+//   node tools/instagram/instagram.mjs publish --due [--dry-run]
+//   node tools/instagram/instagram.mjs refresh [--update-github-secrets]
 //
-// Needs POSTIZ_API_KEY for accounts/schedule. POSTIZ_API_URL is optional
-// (defaults to Postiz cloud; set it for a self-hosted Postiz).
+// Each account needs a token in IG_TOKEN_<ACCOUNT> (e.g. IG_TOKEN_NGATURDUIT).
+// Instagram downloads the images itself, from GitHub's public raw links.
 // See tools/instagram/README.md.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, relative, dirname, basename } from 'node:path';
+import { writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { join, relative, dirname, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { loadPost, checkPost, RECEIPT } from './lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..');
-const ACCOUNTS_FILE = join(HERE, 'accounts.json');
+const MAX_LATE_HOURS = 24; // a post more than this late is skipped, not published
+const POLL_MS = Number(process.env.IG_POLL_MS || 3000);
+const POLL_TRIES = 40; // about 2 minutes
 
-const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+// ---------- Instagram Graph API ----------
 
-// ---------- Postiz API ----------
+const API_BASE = (process.env.IG_API_BASE || 'https://graph.instagram.com').replace(/\/+$/, '');
+const API_VERSION = process.env.IG_API_VERSION || 'v23.0';
 
-function api() {
-  const key = process.env.POSTIZ_API_KEY;
-  if (!key) fail('POSTIZ_API_KEY is not set. Create one in Postiz under Settings → Public API.');
-  const base = (process.env.POSTIZ_API_URL || 'https://api.postiz.com').replace(/\/+$/, '');
+function tokenEnvName(account) {
+  return `IG_TOKEN_${account.toUpperCase()}`;
+}
 
-  async function request(path, init = {}) {
-    const headers = { Authorization: key, ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers };
-    const res = await fetch(base + path, { ...init, headers });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`Postiz ${init.method || 'GET'} ${path} failed (${res.status}): ${text.slice(0, 500)}`);
-    try { return JSON.parse(text); } catch { return text; }
+function tokenFor(account) {
+  const name = tokenEnvName(account);
+  const token = process.env[name];
+  if (!token) throw new Error(`${name} is not set. Add the token for "${account}" (see tools/instagram/README.md).`);
+  return token;
+}
+
+async function graph(token, method, path, params = {}) {
+  const url = new URL(`${API_BASE}/${API_VERSION}/${path.replace(/^\//, '')}`);
+  const init = { method };
+  if (method === 'GET') {
+    for (const [k, v] of Object.entries({ ...params, access_token: token })) url.searchParams.set(k, v);
+  } else {
+    init.body = new URLSearchParams({ ...params, access_token: token });
   }
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok || data.error) {
+    const e = data.error || {};
+    throw new Error(`Instagram ${method} ${path} failed (${res.status}): ${e.message || text.slice(0, 300)}${e.error_user_msg ? ` ${e.error_user_msg}` : ''}`);
+  }
+  return data;
+}
 
-  return {
-    integrations: () => request('/public/v1/integrations'),
-    settings: (id) => request(`/public/v1/integration-settings/${id}`),
-    upload: (buf, name) => {
-      const form = new FormData();
-      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-      form.append('file', new Blob([buf], { type: MIME[ext] || 'application/octet-stream' }), name);
-      return request('/public/v1/upload', { method: 'POST', body: form });
-    },
-    createPost: (body) => request('/public/v1/posts', { method: 'POST', body: JSON.stringify(body) }),
-  };
+async function whoAmI(token) {
+  const me = await graph(token, 'GET', 'me', { fields: 'user_id,username' });
+  return { id: me.user_id || me.id, username: me.username };
+}
+
+// Create a media container, then wait until Instagram has fetched and processed it.
+async function createContainer(token, igId, params) {
+  const { id } = await graph(token, 'POST', `${igId}/media`, params);
+  for (let i = 0; i < POLL_TRIES; i++) {
+    const c = await graph(token, 'GET', id, { fields: 'status_code,status' });
+    if (c.status_code === 'FINISHED') return id;
+    if (c.status_code === 'ERROR' || c.status_code === 'EXPIRED') {
+      throw new Error(`Instagram could not process the media (${c.status_code}${c.status ? `: ${c.status}` : ''}).`);
+    }
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  throw new Error('Instagram took too long to process the media. Try again later.');
+}
+
+// ---------- image URLs ----------
+
+function git(...args) {
+  return execFileSync('git', args, { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+}
+
+// Where Instagram can download the images from: GitHub's raw link at a fixed commit.
+function imageUrlBase() {
+  if (process.env.IMAGE_BASE_URL) return process.env.IMAGE_BASE_URL.replace(/\/+$/, '');
+  if (process.env.GITHUB_REPOSITORY && process.env.GITHUB_SHA) {
+    return `https://raw.githubusercontent.com/${process.env.GITHUB_REPOSITORY}/${process.env.GITHUB_SHA}`;
+  }
+  const remote = git('remote', 'get-url', 'origin');
+  const m = remote.match(/github\.com[:/]([^/]+\/[^/]+?)(\.git)?$/) || remote.match(/\/git\/([^/]+\/[^/]+?)(\.git)?$/);
+  if (!m) throw new Error(`Cannot tell the GitHub repo from origin (${remote}). Set IMAGE_BASE_URL.`);
+  const sha = git('rev-parse', 'HEAD');
+  if (!git('branch', '-r', '--contains', sha)) throw new Error('This commit is not pushed yet, so GitHub cannot serve the images. Push first.');
+  return `https://raw.githubusercontent.com/${m[1]}/${sha}`;
+}
+
+function imageUrl(base, path) {
+  const rel = relative(REPO, path).split(sep).join('/');
+  if (!process.env.IMAGE_BASE_URL && !process.env.GITHUB_SHA) {
+    // Locally: the file must be committed exactly as it is on disk.
+    try { git('ls-files', '--error-unmatch', rel); } catch { throw new Error(`${rel} is not committed. Commit and push it first.`); }
+    try { git('diff', '--quiet', 'HEAD', '--', rel); } catch { throw new Error(`${rel} has changes that are not committed.`); }
+  }
+  return `${base}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+async function checkUrl(url) {
+  const res = await fetch(url, { method: 'HEAD' });
+  const type = res.headers.get('content-type') || '';
+  if (!res.ok) throw new Error(`Image is not reachable (${res.status}): ${url}`);
+  if (!type.startsWith('image/jpeg')) throw new Error(`Image is served as "${type}", Instagram needs image/jpeg: ${url}`);
 }
 
 // ---------- helpers ----------
 
-function fail(msg) {
-  console.error(`✖ ${msg}`);
-  process.exit(1);
-}
-
-function loadAccounts() {
-  if (!existsSync(ACCOUNTS_FILE)) return {};
-  return JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf8'));
-}
-
 function rel(p) {
   return relative(process.cwd(), p) || '.';
-}
-
-function isInstagram(i) {
-  return /instagram/i.test(i.identifier || i.providerIdentifier || '');
 }
 
 function printCheck(post, result) {
@@ -75,7 +127,7 @@ function printCheck(post, result) {
   console.log(`  at: ${post.at ?? '?'}${result.when ? `  (UTC ${result.when})` : ''}`);
   console.log(`  images: ${post.images.map((i) => i.name || basename(i.path)).join(', ') || 'none'}`);
   console.log(`  caption: ${[...post.caption].length} chars`);
-  if (post.receipt) console.log(`  already scheduled: post ${post.receipt.postIds?.join(', ')} on ${post.receipt.scheduledAt}`);
+  if (post.receipt) console.log(`  already published: ${post.receipt.permalink || post.receipt.mediaId} on ${post.receipt.publishedAt}`);
   for (const w of result.warnings) console.log(`  ⚠ ${w}`);
   for (const e of result.errors) console.log(`  ✖ ${e}`);
   if (!result.errors.length) console.log('  ✔ ready');
@@ -85,7 +137,7 @@ function printCheck(post, result) {
 function findPostFolders() {
   const out = [];
   for (const product of readdirSync(REPO, { withFileTypes: true })) {
-    if (!product.isDirectory() || product.name.startsWith('.') || product.name === 'tools' || product.name === 'node_modules') continue;
+    if (!product.isDirectory() || product.name.startsWith('.') || ['tools', 'node_modules'].includes(product.name)) continue;
     const ig = join(REPO, product.name, 'instagram');
     if (!existsSync(ig)) continue;
     for (const d of readdirSync(ig, { withFileTypes: true })) {
@@ -98,38 +150,30 @@ function findPostFolders() {
 // ---------- commands ----------
 
 async function cmdAccounts() {
-  const list = await api().integrations();
-  const all = Array.isArray(list) ? list : list.integrations || [];
-  const ig = all.filter(isInstagram);
-  if (!ig.length) {
-    console.log('No Instagram account is connected in Postiz yet. Connect one under Add Channel → Instagram.');
-    return;
+  const names = Object.keys(process.env).filter((k) => /^IG_TOKEN_[A-Z0-9_]+$/.test(k) && process.env[k]);
+  if (!names.length) return console.log('No IG_TOKEN_<ACCOUNT> variables are set.');
+  for (const name of names) {
+    const account = name.slice('IG_TOKEN_'.length).toLowerCase();
+    try {
+      const me = await whoAmI(process.env[name]);
+      console.log(`  ${account.padEnd(14)} @${me.username}  (id ${me.id})`);
+    } catch (e) {
+      console.log(`  ${account.padEnd(14)} ✖ ${e.message}`);
+    }
   }
-  const accounts = loadAccounts();
-  const byId = Object.fromEntries(Object.entries(accounts).map(([k, v]) => [v, k]));
-  console.log('Instagram accounts in Postiz:\n');
-  for (const i of ig) {
-    const mapped = byId[i.id] ? `→ "${byId[i.id]}" in accounts.json` : '(not in accounts.json yet)';
-    console.log(`  ${i.id}  ${i.name || ''} ${i.profile ? `@${i.profile}` : ''}  [${i.identifier}]${i.disabled ? ' DISABLED' : ''}  ${mapped}`);
-  }
-  console.log(`\nPut the id you want next to each account name in ${rel(ACCOUNTS_FILE)}.`);
 }
 
 function cmdCheck(dirs) {
-  if (!dirs.length) fail('Give at least one post folder.');
+  if (!dirs.length) throw new Error('Give at least one post folder.');
   let bad = 0;
-  const accounts = loadAccounts();
   for (const dir of dirs) {
     let post;
     try { post = loadPost(dir); } catch (e) { console.log(`\n${dir}\n  ✖ ${e.message}`); bad++; continue; }
-    const result = checkPost(post);
-    if (post.account && !accounts[post.account]) {
-      result.errors.push(`Account "${post.account}" has no Postiz id in tools/instagram/accounts.json yet.`);
-    }
+    const result = checkPost(post, { requireFuture: !post.receipt });
     printCheck(post, result);
     if (result.errors.length) bad++;
   }
-  if (bad) process.exit(1);
+  if (bad) process.exitCode = 1;
 }
 
 function cmdList() {
@@ -138,7 +182,7 @@ function cmdList() {
   for (const dir of folders) {
     try {
       const post = loadPost(dir);
-      const state = post.receipt ? `scheduled ${post.receipt.scheduledAt}` : 'not scheduled';
+      const state = post.receipt ? `published ${post.receipt.publishedAt}` : post.status === 'draft' ? 'draft (on hold)' : 'waiting';
       console.log(`${rel(dir).padEnd(55)} ${String(post.account).padEnd(14)} ${String(post.at).padEnd(18)} ${state}`);
     } catch (e) {
       console.log(`${rel(dir).padEnd(55)} ✖ ${e.message}`);
@@ -146,116 +190,145 @@ function cmdList() {
   }
 }
 
-async function cmdSchedule(dirs, flags) {
-  if (!dirs.length) fail('Give at least one post folder.');
-  const accounts = loadAccounts();
-  const postiz = flags.dryRun ? null : api();
-  const settingsCache = {};
+// Publish one post. Returns 'published' | 'skipped' and throws on failure.
+async function publishOne(dir, { now, force, dryRun, base, quietSkip }) {
+  const post = loadPost(dir);
+  const skip = (why) => { if (!quietSkip) console.log(`\n${rel(post.dir)}\n  ↷ ${why}`); return 'skipped'; };
 
-  for (const dir of dirs) {
-    const post = loadPost(dir);
-    if (flags.draft) post.status = 'draft';
+  if (post.receipt) return skip(`already published: ${post.receipt.permalink || post.receipt.mediaId}`);
+  if (post.status === 'draft') return skip('status is "draft". Change it to "schedule" to publish.');
 
-    if (post.receipt && !flags.force) {
-      console.log(`\n${rel(post.dir)}\n  ↷ skipped: already sent to Postiz (post ${post.receipt.postIds?.join(', ')}). Use --force to send it again.`);
-      continue;
+  const result = checkPost(post, { requireFuture: false });
+  if (result.when && !force) {
+    const lateMs = now - new Date(result.when);
+    if (lateMs < 0) return skip(`not due yet (${post.at} WIB).`);
+    if (lateMs > MAX_LATE_HOURS * 3600e3) {
+      // Not an error: failing here would turn every run red until someone edits the post.
+      const msg = `${rel(post.dir)}: "at" is more than ${MAX_LATE_HOURS} hours ago, so it was not published. Update "at", or publish it by hand with --now.`;
+      console.log(process.env.GITHUB_ACTIONS ? `::warning::${msg}` : `\n⚠ ${msg}`);
+      return 'skipped';
     }
-
-    const integrationId = accounts[post.account];
-    if (!integrationId) fail(`${rel(post.dir)}: account "${post.account}" has no Postiz id in ${rel(ACCOUNTS_FILE)}. Run "accounts" to find it.`);
-
-    // Read the account's rules from Postiz before posting. Settings that do not
-    // apply are dropped silently by Postiz, so this is the place to catch them.
-    let maxChars;
-    if (postiz) {
-      settingsCache[integrationId] ??= await postiz.settings(integrationId);
-      const s = settingsCache[integrationId]?.output ?? settingsCache[integrationId] ?? {};
-      if (typeof s.maxLength === 'number') maxChars = s.maxLength;
-      if (s.rules) console.log(`\nPostiz rules for ${post.account}:\n  ${String(s.rules).split('\n').join('\n  ')}`);
-      const postTypeField = s.settings?.properties?.post_type;
-      const allowed = postTypeField?.enum || postTypeField?.anyOf?.map((o) => o.const).filter(Boolean);
-      if (allowed?.length && !allowed.includes(post.postType)) {
-        fail(`${rel(post.dir)}: Postiz does not accept post_type "${post.postType}" for this account (allowed: ${allowed.join(', ')}).`);
-      }
-    }
-
-    const result = checkPost(post, maxChars ? { maxChars } : {});
-    printCheck(post, result);
-    if (result.errors.length) fail(`${rel(post.dir)} has problems. Nothing was sent.`);
-
-    if (flags.dryRun) {
-      console.log(`  (dry run) would ${post.status === 'draft' ? 'save a draft' : 'schedule'} for ${result.when} on ${post.account} (${integrationId}).`);
-      continue;
-    }
-
-    // 1. Upload every image. Instagram only takes media hosted by Postiz.
-    const uploaded = [];
-    for (const img of post.images) {
-      const res = await postiz.upload(readFileSync(img.path), img.name);
-      if (!res?.path) fail(`Upload of ${img.name} returned no path: ${JSON.stringify(res)}`);
-      console.log(`  ↑ uploaded ${img.name}`);
-      uploaded.push({ id: res.id || Math.random().toString(36).slice(2, 10), path: res.path });
-    }
-
-    // 2. Create the post.
-    const body = {
-      type: post.status,
-      date: result.when,
-      shortLink: false,
-      tags: [],
-      posts: [{
-        integration: { id: integrationId },
-        value: [{ content: post.postType === 'story' ? '' : post.caption, image: uploaded }],
-        // Postiz fills in the provider type from the integration id.
-        settings: { post_type: post.postType },
-      }],
-    };
-    const created = await postiz.createPost(body);
-    const ids = (Array.isArray(created) ? created : [created]).map((p) => p?.postId || p?.id).filter(Boolean);
-
-    // 3. Save a receipt so this folder is never sent twice.
-    const receipt = {
-      postIds: ids,
-      group: (Array.isArray(created) ? created[0] : created)?.group,
-      account: post.account,
-      integrationId,
-      status: post.status,
-      scheduledAt: result.when,
-      sentAt: new Date().toISOString(),
-      media: uploaded.map((u) => u.path),
-    };
-    writeFileSync(join(post.dir, RECEIPT), JSON.stringify(receipt, null, 2) + '\n');
-    console.log(`  ✔ ${post.status === 'draft' ? 'draft saved' : 'scheduled'} in Postiz (post ${ids.join(', ') || '?'}). Receipt: ${rel(join(post.dir, RECEIPT))}`);
   }
+  printCheck(post, result);
+  if (result.errors.length) throw new Error(`${rel(post.dir)} has problems. Nothing was published.`);
+
+  const urls = post.images.map((img) => imageUrl(base, img.path));
+  if (dryRun) {
+    console.log(`  (dry run) would publish to "${post.account}" with:\n    ${urls.join('\n    ')}`);
+    return 'skipped';
+  }
+
+  for (const u of urls) await checkUrl(u);
+  const token = tokenFor(post.account);
+  const me = await whoAmI(token);
+  console.log(`  → @${me.username}`);
+
+  let creationId;
+  if (post.postType === 'story') {
+    creationId = await createContainer(token, me.id, { media_type: 'STORIES', image_url: urls[0] });
+  } else if (urls.length === 1) {
+    creationId = await createContainer(token, me.id, { image_url: urls[0], caption: post.caption });
+  } else {
+    const children = [];
+    for (const u of urls) children.push(await createContainer(token, me.id, { image_url: u, is_carousel_item: 'true' }));
+    creationId = await createContainer(token, me.id, { media_type: 'CAROUSEL', children: children.join(','), caption: post.caption });
+  }
+
+  const { id: mediaId } = await graph(token, 'POST', `${me.id}/media_publish`, { creation_id: creationId });
+
+  // Write the receipt straight away so a later failure can never cause a second post.
+  const receipt = { mediaId, account: post.account, username: me.username, publishedAt: new Date().toISOString(), scheduledFor: result.when, images: urls };
+  writeFileSync(join(post.dir, RECEIPT), JSON.stringify(receipt, null, 2) + '\n');
+  try {
+    const { permalink } = await graph(token, 'GET', mediaId, { fields: 'permalink' });
+    receipt.permalink = permalink;
+    writeFileSync(join(post.dir, RECEIPT), JSON.stringify(receipt, null, 2) + '\n');
+  } catch { /* the post is live; the link is only nice to have */ }
+  console.log(`  ✔ published ${receipt.permalink || mediaId}`);
+  return 'published';
+}
+
+async function cmdPublish(dirs, flags) {
+  const due = flags.due;
+  if (!due && !dirs.length) throw new Error('Give a post folder, or --due to publish every post whose time has come.');
+  const folders = due ? findPostFolders() : dirs;
+  const base = imageUrlBase();
+  const now = new Date();
+  let published = 0, failed = 0;
+  for (const dir of folders) {
+    try {
+      const r = await publishOne(dir, { now, force: flags.now, dryRun: flags.dryRun, base, quietSkip: due });
+      if (r === 'published') published++;
+    } catch (e) {
+      failed++;
+      console.error(`  ✖ ${e.message}`);
+    }
+  }
+  console.log(`\n${published} published, ${failed} failed.`);
+  if (failed) process.exitCode = 1;
+}
+
+// Long-lived tokens last 60 days. Refreshing gives a fresh 60 days.
+async function cmdRefresh(flags) {
+  const names = Object.keys(process.env).filter((k) => /^IG_TOKEN_[A-Z0-9_]+$/.test(k) && process.env[k]);
+  if (!names.length) return console.log('No IG_TOKEN_<ACCOUNT> variables are set. Nothing to renew.');
+  let failed = 0;
+  for (const name of names) {
+    try {
+      const url = new URL(`${API_BASE}/refresh_access_token`);
+      url.searchParams.set('grant_type', 'ig_refresh_token');
+      url.searchParams.set('access_token', process.env[name]);
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok || !data.access_token) throw new Error(data.error?.message || `HTTP ${res.status}`);
+      const days = Math.round((data.expires_in || 0) / 86400);
+      if (flags.updateGithubSecrets) {
+        // The new token goes to gh on stdin, never to the log.
+        execFileSync('gh', ['secret', 'set', name], { input: data.access_token, stdio: ['pipe', 'ignore', 'inherit'] });
+        console.log(`✔ ${name} refreshed (valid ${days} more days) and saved to GitHub secrets.`);
+      } else {
+        console.log(`✔ ${name} refreshed (valid ${days} more days). New token:\n${data.access_token}`);
+      }
+    } catch (e) {
+      failed++;
+      console.error(`✖ ${name}: ${e.message}`);
+    }
+  }
+  if (failed) process.exitCode = 1;
 }
 
 // ---------- main ----------
 
 const [cmd, ...rest] = process.argv.slice(2);
 const flags = {
-  draft: rest.includes('--draft'),
+  now: rest.includes('--now'),
+  due: rest.includes('--due'),
   dryRun: rest.includes('--dry-run'),
-  force: rest.includes('--force'),
+  updateGithubSecrets: rest.includes('--update-github-secrets'),
 };
 const dirs = rest.filter((a) => !a.startsWith('--'));
 
 try {
   switch (cmd) {
     case 'accounts': await cmdAccounts(); break;
-    case 'check': cmdCheck(dirs); break;
     case 'list': cmdList(); break;
-    case 'schedule': await cmdSchedule(dirs, flags); break;
+    case 'check': cmdCheck(dirs); break;
+    case 'publish': await cmdPublish(dirs, flags); break;
+    case 'refresh': await cmdRefresh(flags); break;
     default:
       console.log(`Usage:
-  node tools/instagram/instagram.mjs accounts                 list Instagram accounts connected in Postiz
-  node tools/instagram/instagram.mjs list                     list post folders and whether they were sent
-  node tools/instagram/instagram.mjs check <folder>...        check posts offline against Instagram's limits
-  node tools/instagram/instagram.mjs schedule <folder>...     upload images and schedule in Postiz
-      --draft     save as a draft in Postiz instead of scheduling
-      --dry-run   check everything, send nothing
-      --force     send again even if the folder has a receipt`);
-      process.exit(cmd ? 1 : 0);
+  node tools/instagram/instagram.mjs accounts               show which Instagram account each token belongs to
+  node tools/instagram/instagram.mjs list                   list post folders and their state
+  node tools/instagram/instagram.mjs check <folder>...      check posts against Instagram's limits (offline)
+  node tools/instagram/instagram.mjs publish <folder>...    publish posts whose time has come
+      --now        publish now even if "at" is later (or long past)
+      --dry-run    check everything, publish nothing
+  node tools/instagram/instagram.mjs publish --due          publish every due post in the repo (used by the GitHub Action)
+  node tools/instagram/instagram.mjs refresh                renew the 60-day tokens
+      --update-github-secrets   save the new tokens with "gh secret set"`);
+      if (cmd) process.exitCode = 1;
   }
 } catch (e) {
-  fail(e.message);
+  console.error(`✖ ${e.message}`);
+  process.exitCode = 1;
 }

@@ -17,7 +17,7 @@ export const LIMITS = {
 };
 
 export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
-export const RECEIPT = '.postiz.json';
+export const RECEIPT = '.instagram.json';
 const DEFAULT_OFFSET = '+07:00'; // WIB
 
 // Read width and height from a PNG, JPEG or WebP header.
@@ -129,19 +129,22 @@ export function loadPost(dir) {
 
 // Check a loaded post against Instagram's limits.
 // Returns { errors, warnings, when }. errors block scheduling; warnings do not.
-export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionChars } = {}) {
+// With requireFuture (the default) a time in the past is an error; the publisher
+// turns it off because a due post is exactly what it is looking for.
+export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionChars, requireFuture = true } = {}) {
   const errors = [];
   const warnings = [];
   let when = null;
 
-  if (!post.account) errors.push('"account" is missing in post.json (a name from tools/instagram/accounts.json).');
+  if (!post.account) errors.push('"account" is missing in post.json (e.g. "ngaturduit").');
+  else if (!/^[a-z0-9_]+$/.test(post.account)) errors.push(`"account" must be lowercase letters, digits or _ (got "${post.account}").`);
   if (!['post', 'story'].includes(post.postType)) errors.push(`"type" must be "post" or "story", got "${post.postType}".`);
   if (!['schedule', 'draft'].includes(post.status)) errors.push(`"status" must be "schedule" or "draft", got "${post.status}".`);
 
   try {
     when = parseWhen(post.at);
-    if (new Date(when) <= new Date(now.getTime() + 5 * 60 * 1000)) {
-      errors.push(`"at" (${post.at}) is in the past or less than 5 minutes away.`);
+    if (requireFuture && new Date(when) <= now) {
+      errors.push(`"at" (${post.at}) is in the past. It would go out on the next publish run.`);
     }
   } catch (e) {
     errors.push(e.message);
@@ -161,13 +164,13 @@ export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionCha
 
   // Images
   const n = post.images.length;
-  if (n === 0) errors.push('No image found. Put a .jpg/.png/.webp in the folder or list it under "images".');
+  if (n === 0) errors.push('No image found. Put a .jpg in the folder or list it under "images".');
   if (post.postType === 'post' && n > LIMITS.carouselMax) errors.push(`${n} images. A carousel holds at most ${LIMITS.carouselMax}.`);
   if (post.postType === 'story' && n > 1) errors.push(`A story takes one image, found ${n}.`);
 
   for (const img of post.images) {
     if (img.missing) { errors.push(`Image not found: ${img.path}`); continue; }
-    if (!IMAGE_EXTS.includes(extname(img.path).toLowerCase())) { errors.push(`${img.name}: not an image Instagram takes (use .jpg or .png).`); continue; }
+    if (!IMAGE_EXTS.includes(extname(img.path).toLowerCase())) { errors.push(`${img.name}: not an image Instagram takes (use .jpg).`); continue; }
     if (img.bytes > LIMITS.imageBytes) errors.push(`${img.name} is ${(img.bytes / 1048576).toFixed(1)} MB. The limit is 8 MB.`);
     if (!img.size) { errors.push(`${img.name}: could not read the image size. Is the file a real image?`); continue; }
     const { width, height, format } = img.size;
@@ -179,7 +182,7 @@ export function checkPost(post, { now = new Date(), maxChars = LIMITS.captionCha
       warnings.push(`${img.name} is ${width}×${height}. Stories look best at 9:16 (e.g. 1080×1920).`);
     }
     if (width < 320) warnings.push(`${img.name} is only ${width}px wide. Instagram will upscale it; 1080px is ideal.`);
-    if (format !== 'jpeg') warnings.push(`${img.name} is ${format.toUpperCase()}. Instagram's API is built around JPEG; if publishing fails, export it as .jpg.`);
+    if (format !== 'jpeg') errors.push(`${img.name} is ${format.toUpperCase()}. Instagram's API only takes JPEG: export it as .jpg.`);
   }
 
   if (n > 1 && post.postType === 'post') {

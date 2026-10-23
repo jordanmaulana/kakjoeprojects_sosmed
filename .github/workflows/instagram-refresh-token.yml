@@ -1,0 +1,28 @@
+name: Renew Instagram tokens
+
+# Instagram tokens last 60 days. Renewing every Monday keeps them alive.
+# Needs a GH_SECRETS_TOKEN secret: a fine-grained GitHub token for this repo
+# with "Secrets: Read and write", so the renewed tokens can be saved.
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Renew tokens and save them as secrets
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRETS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          IG_TOKEN_NGATURDUIT: ${{ secrets.IG_TOKEN_NGATURDUIT }}
+          IG_TOKEN_CARIINKERJA: ${{ secrets.IG_TOKEN_CARIINKERJA }}
+          IG_TOKEN_AIBURNOUT: ${{ secrets.IG_TOKEN_AIBURNOUT }}
+        run: node tools/instagram/instagram.mjs refresh --update-github-secrets
