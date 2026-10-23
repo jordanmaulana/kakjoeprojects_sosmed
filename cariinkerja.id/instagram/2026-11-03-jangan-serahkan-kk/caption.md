@@ -1,5 +1,5 @@
 <!-- Workflow 1 (topik dari Jordan). Level jualan 1: produk cuma di slide terakhir dan baris terakhir caption. Lihat brief.md. -->
-Baru tahap wawancara, udah diminta foto KK? Tahan dulu ya.
+Baru tahap wawancara, udah diminta KK? Tahan dulu ya.
 
 Jadi gini. KK itu bukan cuma datamu. Di situ ada NIK semua anggota keluarga, tanggal lahir, sampai nama ibu kandung, yang sering dipakai bank buat verifikasi. Sekali kekirim ke orang yang salah, yang kena bisa sekeluarga.
 

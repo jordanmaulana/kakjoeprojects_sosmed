@@ -2,7 +2,7 @@
   "theme": "cariinkerja",
   "brand": "",
   "slides": [
-    { "title": "Baru wawancara,\nudah diminta **foto KK?**", "size": 96,
+    { "title": "Baru wawancara,\nudah diminta **KK?**", "size": 96,
       "body": ["Tahan dulu ya."] },
     { "eyebrow": "Jadi gini", "title": "Satu lembar KK isinya data **sekeluarga.**", "size": 76,
       "list": ["NIK tiap anggota keluarga, plus nomor KK-nya.", "Tanggal lahir, agama, pendidikan, pekerjaan.", "Nama ayah dan ibu kandung. Nama ibu kandung sering dipakai bank buat verifikasi."] },
