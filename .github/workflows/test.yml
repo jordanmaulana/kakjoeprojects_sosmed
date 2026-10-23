@@ -15,6 +15,4 @@ jobs:
           node-version: 22
       - run: npm test
       - name: Check every post folder
-        run: |
-          dirs=$(find . -path '*/instagram/*/post.json' -not -path './node_modules/*' -exec dirname {} \;)
-          [ -z "$dirs" ] || node tools/instagram/instagram.mjs check $dirs
+        run: node tools/instagram/instagram.mjs check

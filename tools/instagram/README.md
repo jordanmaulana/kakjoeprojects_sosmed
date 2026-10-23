@@ -1,54 +1,19 @@
 # Instagram posting
 
-Put an image and a caption in a folder, merge it to `main`, and it is published on
-Instagram at the time you set. All products post to **one shared Instagram account**. It uses Instagram's own API directly, with no other
-service in between. Plain Node 20+, no dependencies.
+Posts are prepared in this repo and scheduled by hand in the Instagram app. All products
+share **one Instagram account**.
 
-How it works:
+- Each post is a folder with its images, caption and time.
+- Every PR checks the posts against Instagram's limits.
+- [`instagram-queue.md`](../../instagram-queue.md) lists every post that is ready and not
+  yet scheduled, soonest first. Each entry has image downloads, a caption you can copy, and
+  the time. It updates itself when posts change on `main`, and every morning at 06:00 WIB.
+- Once a week, open the queue on your phone and schedule that week's posts in Instagram
+  (about 10 minutes). Instagram then publishes them on time by itself.
 
-- A GitHub Action ([`instagram-publish.yml`](../../.github/workflows/instagram-publish.yml))
-  runs every 15 minutes and publishes every post folder whose time has come.
-- Instagram downloads the images itself from GitHub's public raw links (this repo is
-  public), pinned to the exact commit, so a later edit can't change a live post.
-- After publishing, the Action commits a receipt (`.instagram.json`) into the folder, so the
-  same post is never published twice.
-- A second Action ([`instagram-refresh-token.yml`](../../.github/workflows/instagram-refresh-token.yml))
-  renews the access token every Monday. It expires after 60 days if it isn't renewed.
-
-## One-time setup
-
-### 1. Instagram account
-
-It must be a **Business** or **Creator** account (Instagram app → Settings → Account type
-and tools). A Facebook Page is not needed.
-
-### 2. Meta developer app
-
-1. Go to [developers.facebook.com](https://developers.facebook.com/apps) → **Create app**.
-   Choose the use case for managing content on Instagram, and the **Business** app type.
-2. In the app, open **App roles → Roles → Add people → Instagram Tester** and add the
-   Instagram account. Accept the invite in Instagram (Settings → Apps and websites →
-   Tester invites, or on instagram.com).
-3. Open **Instagram → API setup with Instagram login → Generate access tokens**, add the
-   account, and generate a token. It needs the `instagram_business_basic` and
-   `instagram_business_content_publish` permissions. The token lasts 60 days.
-
-The app can stay in **development mode**. That is enough for posting to accounts that are
-testers on the app, so Meta's app review isn't needed. (Meta renames these menus from time
-to time. If something isn't where it's described here, look for "Instagram API with
-Instagram Login".)
-
-### 3. GitHub secrets
-
-In the repo: **Settings → Secrets and variables → Actions → New repository secret**.
-
-| Secret | Value |
-|---|---|
-| `IG_TOKEN` | The Instagram token from step 2. |
-| `GH_SECRETS_TOKEN` | A [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new) for this repo only, with **Secrets: Read and write**. The weekly renewal uses it to save the new Instagram token. |
-
-To check the token locally: `IG_TOKEN=... npm run ig -- whoami` prints which Instagram
-account it posts as.
+No Meta developer app, tokens or third-party service. Instagram's built-in scheduler needs a
+**Business or Creator** account (Instagram → Settings → Account type and tools), and can
+schedule up to 75 days ahead.
 
 ## Making a post
 
@@ -67,55 +32,58 @@ ngaturduit.my.id/instagram/2026-10-28-naik-level/
 ```json
 {
   "at": "2026-10-28 19:00",
-  "type": "post",
-  "status": "schedule"
+  "status": "ready"
 }
 ```
 
 | Field | Meaning |
 |---|---|
-| `at` | When to publish. Read as **WIB** unless you add an offset (`2026-10-28T19:00:00+08:00`). |
-| `type` | `post` (feed, default) or `story` (one 9:16 image, no caption). |
-| `status` | `schedule` (default) to publish at `at`, or `draft` to keep it on hold. |
-| `images` | Optional list of image paths relative to the folder. Without it, every `.jpg` in the folder is used. |
+| `at` | When it should go out. Read as **WIB** unless you add an offset (`2026-10-28T19:00:00+08:00`). |
+| `status` | `ready` (default): shows in the queue. `draft`: still being worked on, hidden. `scheduled`: already queued in the Instagram app, hidden. |
+| `images` | Optional list of image paths relative to the folder. Without it, every `.jpg`/`.png` in the folder is used. |
 
-In `caption.md`, `<!-- comments -->` are notes to yourself and are not published.
+In `caption.md`, `<!-- comments -->` are notes to yourself and don't appear in the queue.
 
-Images must be **JPEG**: Instagram's API doesn't take PNG or WebP. Feed images must be
-between 4:5 portrait (1080×1350) and 1.91:1 landscape (1080×566). 1080×1080 is always safe.
+Images: `.jpg` or `.png`, at least 1080px wide, between 4:5 portrait (1080×1350) and
+1.91:1 landscape (1080×566). 1080×1080 always works. In a carousel, use the same ratio for
+every image.
 
 [`ngaturduit.my.id/instagram/2099-01-01-contoh`](../../ngaturduit.my.id/instagram/2099-01-01-contoh)
-is a complete example. It is a draft dated 2099, so it is never published.
+is a complete example. It's a draft, so it never shows in the queue.
 
-Open a PR with the folder. The **Test** check validates every post (caption ≤ 2,200
-characters, ≤ 30 hashtags, ≤ 20 @mentions, 1–10 JPEGs of ≤ 8 MB in the right ratio, time
-in the future). Once merged, the post goes out on the first run after `at`.
+## Scheduling the week
 
-## Timing
+For each post in [`instagram-queue.md`](../../instagram-queue.md):
 
-- GitHub runs scheduled Actions on a best-effort basis, so a post can go out a few minutes
-  (sometimes 15–30) after `at`.
-- A post more than 24 hours late is **not** published, so an old folder merged by mistake
-  can't go out. The run shows a warning. Change `at`, or publish it by hand (below).
-- GitHub pauses scheduled Actions in a repo with no commits for 60 days. If that happens,
-  re-enable them under the Actions tab.
+1. Tap each **Download** link and save the image to your phone.
+2. In Instagram, tap **+ → Post** and pick the images in the order listed. Tap **Next**.
+3. Copy the caption block (GitHub shows a copy button on it) and paste it.
+4. Open **More options → Schedule this post** (called Advanced settings in some app
+   versions), set the date and time, and tap **Schedule**.
+5. Mark it done so it leaves the queue: tell Claude which posts you scheduled, or set
+   `"status": "scheduled"` in the post's `post.json`, or run `npm run ig -- done <folder>`.
+
+To change or cancel a post you've already scheduled, open **Scheduled content** from the
+menu on your Instagram profile.
+
+## Checks
+
+Every PR runs the **Test** check, which stops the PR if a post has:
+
+- a caption over 2,200 characters, more than 30 hashtags or more than 20 @mentions
+- no image, more than 10 images, an image over 8 MB, or an image Instagram would crop
+- a missing or invalid `at`, or an unknown `status`
+
+It warns (without failing) when `at` has passed for a post still marked `ready`, when `at`
+is more than 75 days away, or when an image is under 1080px wide.
 
 ## Commands
 
 ```bash
-npm run ig -- list                          # every post folder and its state
-npm run ig -- check   <folder>              # check a post against Instagram's limits
-npm run ig -- publish <folder> --dry-run    # show what would be published, publish nothing
-npm run ig -- publish <folder> --now        # publish right now (folder must be committed and pushed)
-npm run ig -- publish --due                 # what the Action runs
-npm run ig -- refresh                       # renew the token and print it
+npm run ig -- list                  # every post folder and its status
+npm run ig -- check [<folder>]      # check posts (all of them by default)
+npm run ig -- queue                 # print the queue page
+npm run ig -- queue --write         # save it to instagram-queue.md
+npm run ig -- done <folder>...      # mark posts as scheduled
 npm test
 ```
-
-To publish from your own machine, set the token (`export IG_TOKEN=...`), and
-commit and push the folder first, because Instagram fetches the image from GitHub. Commit
-the `.instagram.json` it writes afterwards.
-
-Publishing is final: to change or remove a live post, do it in the Instagram app.
-Instagram caps how many posts an account can publish through the API in 24 hours (100 at
-the time of writing). That cap is shared by all products, since they use one account.
