@@ -3,7 +3,8 @@
 - Type: produced (animated text over stock photos, no face)
 - Length: 40 s (8 scenes × 5 s)
 - Audio: no voice, instrumental music only (no vocals, so the text stays the focus). Mood: calm with a little tension in scenes 1 to 4, lighter and reassuring in 5 to 8. Aim for 90 to 100 BPM: at 96 BPM every 5 s scene cut lands on a bar line.
-  - Easiest: Instagram Reels editor, Audio, search "lofi", "suspense", "curious" or "corporate calm". A business account only sees the commercial-use library, so anything listed there is safe to use.
+  - Included: `music.mp3`, an original lo-fi track made for this reel by `tools/music/lofi.py` (synthesized, no samples, so nothing to license). 16 bars at 96 BPM, 2 bars per scene: piano and a clock tick on the hook, beat comes in at 0:05, a short break before 0:20, then it turns major with a melody for the "what to do" half, and fades out over the last 2 s. `scenes-music/` holds the scene videos with their 5 s slice of the track, which is what the Canva reel uses.
+  - Instead, from Instagram's library: Reels editor, Audio, search "lofi", "suspense", "curious" or "corporate calm". A business account only sees the commercial-use library, so anything listed there is safe to use.
   - Or in Canva before exporting: Add audio in the timeline, search the same words, keep only tracks marked "Commercial use allowed", start at 0:00, fade out the last 2 s, then re-export.
   - Avoid: popular songs with vocals, and horror stingers or dramatic hits. The tone is a friendly warning, not fear.
   - Optional: Jordan reads the headlines as a voice-over. If so, drop the music to about 20%.
