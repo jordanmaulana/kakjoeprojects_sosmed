@@ -11,7 +11,7 @@
 
 - `scenes.json` holds the on-screen text per scene. `tools/slides/reel.mjs` renders each scene to `scenes/scene-N.mp4` (1080×1920, 30 fps, 5 s, Geist, light cariinkerja theme): progress bar, word-by-word headline, highlight marker, count-up number, list items one by one.
 - Each scene leaves a plain window at x 60, y 240, 960×740. The photo goes there in Canva, on top of the scene video, because photo sites and Canva downloads are blocked from Claude's environment.
-- Canva design (scenes + photos): see reel.md. Export it from Canva as MP4.
+- Canva design with all 8 scenes and photos: https://canva.link/im08uieuv1h03y8 ("Edukasi pencari kerja Indonesia"). Export it from Canva as MP4 (Share > Download > MP4). Claude can't download from Canva, so the finished MP4 isn't in this folder; add it here once exported if it should be kept.
 
 ## Photos
 
