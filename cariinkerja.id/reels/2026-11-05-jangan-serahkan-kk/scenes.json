@@ -1,0 +1,79 @@
+{
+ "seconds": 5,
+ "scenes": [
+  {
+   "title": "Baru wawancara,\nudah diminta **KK?**",
+   "size": 104,
+   "body": [
+    "Tahan dulu ya."
+   ],
+   "photo": "MAHZBe7-_Ko"
+  },
+  {
+   "eyebrow": "Jadi gini",
+   "title": "Satu lembar KK isinya data **sekeluarga.**",
+   "chips": [
+    "NIK dan nomor KK",
+    "Tanggal lahir, agama, pekerjaan",
+    "Nama ibu kandung"
+   ],
+   "photo": "MAHZBWv0dXM",
+   "size": 76
+  },
+  {
+   "eyebrow": "Data OJK",
+   "count": "23.469",
+   "title": "laporan penipuan lowongan kerja.",
+   "size": 66,
+   "body": [
+    "Laporan ke Indonesia Anti-Scam Centre, Nov 2024 sampai Jan 2026."
+   ],
+   "photo": "MAHZBSFDLqU"
+  },
+  {
+   "eyebrow": "Datanya dipakai buat apa?",
+   "title": "Dijual, atau dipakai **pinjam atas namamu.**",
+   "body": [
+    "Banyak korban baru tahu pas tagihannya datang."
+   ],
+   "photo": "MAHZBee-LO0"
+  },
+  {
+   "eyebrow": "Terus kapan perusahaan butuh KK?",
+   "title": "Biasanya **setelah kamu diterima.**",
+   "body": [
+    "Buat daftar BPJS Kesehatan keluargamu, atau ngurus tanggungan pajak."
+   ],
+   "photo": "MAHZBc2Saz4"
+  },
+  {
+   "eyebrow": "Kalau tetap diminta",
+   "title": "Lakuin ini dulu",
+   "list": [
+    "Tanya buat apa, dan disimpan di mana.",
+    "Cek perusahaannya: website resmi, email kantor, bukan @gmail.com."
+   ],
+   "photo": "MAHYzvQzyuQ"
+  },
+  {
+   "eyebrow": "Kalau tetap diminta",
+   "title": "Lakuin ini dulu",
+   "still": true,
+   "start": 3,
+   "list": [
+    "Kasih tulisan di fotonya: “Hanya untuk rekrutmen PT X”.",
+    "Diminta bayar apa pun? Berhenti di situ."
+   ],
+   "photo": "MAHYzvk1Szo"
+  },
+  {
+   "title": "Perusahaan yang serius **bisa nunggu** sampai kamu diterima.",
+   "size": 78,
+   "body": [
+    "Data keluargamu bukan syarat wawancara."
+   ],
+   "brand": true,
+   "photo": "MAHZBWyR8wk"
+  }
+ ]
+}
