@@ -2,7 +2,11 @@
 
 - Type: produced (animated text over stock photos, no face)
 - Length: 40 s (8 scenes × 5 s)
-- Audio: no voice. Music from Instagram's library, mood "tenang, sedikit tegang, beat pelan". Optional: Jordan reads the headlines as a voice-over.
+- Audio: no voice, instrumental music only (no vocals, so the text stays the focus). Mood: calm with a little tension in scenes 1 to 4, lighter and reassuring in 5 to 8. Aim for 90 to 100 BPM: at 96 BPM every 5 s scene cut lands on a bar line.
+  - Easiest: Instagram Reels editor, Audio, search "lofi", "suspense", "curious" or "corporate calm". A business account only sees the commercial-use library, so anything listed there is safe to use.
+  - Or in Canva before exporting: Add audio in the timeline, search the same words, keep only tracks marked "Commercial use allowed", start at 0:00, fade out the last 2 s, then re-export.
+  - Avoid: popular songs with vocals, and horror stingers or dramatic hits. The tone is a friendly warning, not fear.
+  - Optional: Jordan reads the headlines as a voice-over. If so, drop the music to about 20%.
 - Cover text: Baru wawancara, udah diminta KK? (scene 1's last frame)
 
 | Time | On screen (text) | Photo |
